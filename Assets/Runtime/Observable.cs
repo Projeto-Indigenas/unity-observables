@@ -59,12 +59,12 @@ namespace Observables
 
         public static void InvokeMessage(Observable<TObserved> observable, TObserved payload)
         {
-#if UNITY_EDITOR
+#if OBSERVABLES_DEVELOPMENT
             try
             {
 #endif
                 observable.NotifyObservers(payload);
-#if UNITY_EDITOR
+#if OBSERVABLES_DEVELOPMENT
             }
             catch (Exception ex)
             {
@@ -81,28 +81,28 @@ namespace Observables
         }
 
         private void SetupDestructors(object observer, bool
-#if UNITY_EDITOR || DEBUG
+#if OBSERVABLES_DEVELOPMENT
             manuallyDestroyed
 #else
             _
 #endif
             )
         {
-            if (observer is DestructorObservable destructorObservable)
+            if (observer is ADestructorObservable destructorObservable)
             {
                 destructorObservable.destructorObservable.Observe(this, OnObserverDestructed);
 
                 return;
             }
 
-            if (observer is ObservableBehaviour observableBehaviour)
+            if (observer is AObservableBehaviour observableBehaviour)
             {
                 observableBehaviour.onDestroyObservable.Observe(this, OnObserverDestroyed);
 
                 return;
             }
 
-#if UNITY_EDITOR || DEBUG
+#if OBSERVABLES_DEVELOPMENT
             Type observerType = observer.GetType();
             bool isObservable = observerType.IsGenericType && observerType.GetGenericTypeDefinition() == typeof(Observable<>);
             if (isObservable || manuallyDestroyed) return;
@@ -210,7 +210,7 @@ namespace Observables
             _observersToRemove.Clear();
         }
 
-        private void OnObserverDestructed(DestructorObservable destructorObservable)
+        private void OnObserverDestructed(ADestructorObservable destructorObservable)
         {
             StopObserving(destructorObservable);
 
@@ -218,7 +218,7 @@ namespace Observables
             else _observers.Clear();
         }
 
-        private void OnObserverDestroyed(ObservableBehaviour destroyingBehaviour)
+        private void OnObserverDestroyed(AObservableBehaviour destroyingBehaviour)
         {
             StopObserving(destroyingBehaviour);
 
