@@ -1,4 +1,6 @@
-﻿using UnityEngine;
+﻿#if UNITY_2019_1_OR_NEWER
+
+using UnityEngine;
 
 namespace Observables
 {
@@ -8,10 +10,11 @@ namespace Observables
 
         protected virtual void OnDestroy()
         {
-#if ENABLE_OBSERVABLES_LOGS
-            Debug.Log($"OnDestroy() called for {this}");
-#endif
+            Logger.Log($"OnDestroy() called for {this}");
+
             Observable<AObservableBehaviour>.InvokeMessage(onDestroyObservable, this);
         }
     }
 }
+
+#endif

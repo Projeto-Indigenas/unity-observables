@@ -1,75 +1,133 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using Observables.Extensions;
+
+#if UNITY_2019_1_OR_NEWER
+using UnityEditor;
 using UnityEngine;
+#endif
 
 namespace Observables
 {
     public class Observable<TObserved>
     {
-        private readonly List<object> _observersToRemove = new List<object>();
-        private readonly Dictionary<object, ObserverInfoLists> _observers = new Dictionary<object, ObserverInfoLists>();
-        private readonly Predicate<object> _isObserverInfoPredicate;
+        private static readonly Predicate<WeakReference<object>> _isObserverPredicate = default;
+        private static readonly Predicate<WeakReference<Action<TObserved>>> _isSameActionPredicate = default;
+        private static readonly Predicate<IObserverInfo> _isSameObserverInfoPredicate = default;
+        private static object _searchingObserver = default;
+        private static Action<TObserved> _searchingAction = default;
+        private static IObserverInfo _searchingObserverInfo = default;
 
-        private bool _isIterating = default;
-        private object _searchingObserver = default;
+        private readonly List<WeakReference<object>> _keys = new List<WeakReference<object>>();
+        private readonly Dictionary<WeakReference<object>, List<WeakReference<Action<TObserved>>>> _observers = new Dictionary<WeakReference<object>, List<WeakReference<Action<TObserved>>>>();
+        private readonly Dictionary<WeakReference<object>, List<IObserverInfo>> _observersWithPayload = new Dictionary<WeakReference<object>, List<IObserverInfo>>();
 
-        public Observable()
+        static Observable()
         {
-            _isObserverInfoPredicate = each => Equals(each, _searchingObserver);
+            _isObserverPredicate = each => each.TryGetTarget(out object target) && target.Equals(_searchingObserver);
+            _isSameActionPredicate = each => each.TryGetTarget(out Action<TObserved> target) && target.Equals(_searchingAction);
+            _isSameObserverInfoPredicate = each => Equals(each, _searchingObserverInfo);
         }
         
-        public void Observe(object observer, Action<TObserved> action, bool manuallyDestroyed = false)
+        public void Observe(object observer, Action<TObserved> action)
         {
-            if (observer == this || 
-                _observers.TryGetValue(observer, out ObserverInfoLists lists) && Contains(observer, lists.observers))
+            WeakReference<object> key = _keys.GetWeakReferenceByInstance(observer);
+
+            if (key != null && _observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list))
             {
-                return;
-            }
+                if (Contains(list, action)) return;
 
-            AddObserver(observer, action);
-
-            SetupDestructors(observer, manuallyDestroyed);
-        }
-
-        public void Observe<TPayload>(object observer, Action<TObserved, TPayload> action, bool manuallyDestroyed = false)
-        {
-            if (observer == this || 
-                _observers.TryGetValue(observer, out ObserverInfoLists lists) && Contains(observer, lists.observersWithPayload))
-            {
-                return;
-            }
-
-            AddObserver(observer, action);
-
-            SetupDestructors(observer, manuallyDestroyed);
-        }
-
-        public void StopObserving(object observer)
-        {
-            if (_isIterating)
-            {
-                _observersToRemove.Add(observer);
+                list.Add(new WeakReference<Action<TObserved>>(action, true));
 
                 return;
             }
 
-            _ = _observers.Remove(observer);
+            WeakReference<Action<TObserved>> weakAction = new WeakReference<Action<TObserved>>(action, true);
+            List<WeakReference<Action<TObserved>>> newList = new List<WeakReference<Action<TObserved>>> { weakAction };
+
+            if (key != null) _observers.Add(key, newList);
+            else
+            {
+                key = new WeakReference<object>(observer);
+                _observers.Add(key, newList);
+                _keys.Add(key);
+            }
         }
 
-        public static void InvokeMessage(Observable<TObserved> observable, TObserved payload)
+        public void Observe<TPayload>(object observer, Action<TObserved, TPayload> action)
+        {
+            WeakReference<object> key = _keys.GetWeakReferenceByInstance(observer);
+
+            if (key != null && _observersWithPayload.TryGetValue(key, out List<IObserverInfo> list))
+            {
+                if (Contains(list, action)) return;
+
+                list.Add(new ObserverPayloadInfo<TPayload>(action));
+
+                return;
+            }
+
+            IObserverInfo observerInfo = new ObserverPayloadInfo<TPayload>(action);
+            List<IObserverInfo> newList = new List<IObserverInfo> { observerInfo };
+
+            if (key != null) _observersWithPayload.Add(key, newList);
+            else
+            {
+                key = new WeakReference<object>(observer);
+                _observersWithPayload.Add(key, newList);
+                _keys.Add(key);
+            }
+        }
+
+        public void StopObserving(object observer, Action<TObserved> action)
+        {
+            WeakReference<object> key = _keys.GetWeakReferenceByInstance(observer);
+
+            if (key == null || !_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list)) return;
+
+            _searchingAction = action;
+            list.RemoveWhere(_isSameActionPredicate);
+            _searchingAction = null;
+        }
+
+        public void StopObserving<TPayload>(object observer, Action<TObserved, TPayload> action)
+        {
+            WeakReference<object> key = _keys.GetWeakReferenceByInstance(observer);
+
+            if (key == null || !_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list)) return;
+
+            _searchingObserverInfo = new ObserverPayloadInfo<TPayload>.ActionContainer(action);
+            list.RemoveWhere(_isSameObserverInfoPredicate);
+            _searchingObserverInfo = null;
+        }
+
+        public void StopObservingAll(object observer)
+        {
+            WeakReference<object> key = _keys.GetWeakReferenceByInstance(observer);
+
+            if (key == null) return;
+
+            _keys.Remove(key);
+
+            _observers.Remove(key);
+            _observersWithPayload.Remove(key);
+        }
+
+        public static void InvokeMessage(Observable<TObserved> observable, TObserved observed)
         {
 #if OBSERVABLES_DEVELOPMENT
             try
             {
 #endif
-                observable.NotifyObservers(payload);
+                observable.NotifyObservers(observed);
 #if OBSERVABLES_DEVELOPMENT
             }
             catch (Exception ex)
             {
-                Debug.Log($"Unexpected exception when invoking message. \n" +
-                    $"observed -> {payload}\n" +
+                Logger.Log($"Unexpected exception when invoking message. \n" +
+                    $"observed -> {observed}\n" +
                     $"exception -> {ex}");
             }
 #endif
@@ -77,7 +135,21 @@ namespace Observables
 
         public static void InvokeMessage<TPayload>(Observable<TObserved> observable, TObserved observed, TPayload payload)
         {
-            observable.NotifyObservers(observed, payload);
+#if OBSERVABLES_DEVELOPMENT
+            try
+            {
+#endif
+                observable.NotifyObservers(observed, payload);
+#if OBSERVABLES_DEVELOPMENT
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Unexpected exception when invoking message. \n" +
+                    $"observed -> {observed}\n" +
+                    $"payload -> {payload}\n" +
+                    $"exception -> {ex}");
+            }
+#endif
         }
 
         private void SetupDestructors(object observer, bool
@@ -88,192 +160,151 @@ namespace Observables
 #endif
             )
         {
-            if (observer is ADestructorObservable destructorObservable)
+            if (observer is ADestructorObserver destructorObserver)
             {
-                destructorObservable.destructorObservable.Observe(this, OnObserverDestructed);
+                destructorObserver.destructorObservable.Observe(this, OnObserverDestructed);
 
                 return;
             }
 
+#if UNITY_2019_1_OR_NEWER
             if (observer is AObservableBehaviour observableBehaviour)
             {
                 observableBehaviour.onDestroyObservable.Observe(this, OnObserverDestroyed);
 
                 return;
             }
+#endif
 
 #if OBSERVABLES_DEVELOPMENT
             Type observerType = observer.GetType();
             bool isObservable = observerType.IsGenericType && observerType.GetGenericTypeDefinition() == typeof(Observable<>);
             if (isObservable || manuallyDestroyed) return;
 
-            Debug.Log($"Observer is not either DestructorObservable nor ObservableBehaviour. " +
+            Logger.Log($"Observer is not either DestructorObservable nor ObservableBehaviour. " +
                 $"It should inherit from one of them or stop observing manually.\n" +
                 $"Observable type: {observer}");
 #endif
         }
 
-        private bool Contains(object observer, List<IObserverInfo> observers)
+        private bool Contains(List<WeakReference<Action<TObserved>>> list, Action<TObserved> action)
         {
-            _searchingObserver = observer;
-            bool contains = observers.Contains(_isObserverInfoPredicate);
-            _searchingObserver = null;
-            return contains;
-        }
-
-        private void AddObserver(object observer, Action<TObserved> action) 
-        {
-            ObserverInfo info = new ObserverInfo(observer, action);
-
-            if (_observers.TryGetValue(observer, out ObserverInfoLists lists))
+            for (int index = 0; index < list.Count; index++)
             {
-                lists.observers.Add(info);
-                return;
-            }
-                
-            _observers[observer] = new ObserverInfoLists(new List<IObserverInfo> { info }, new List<IObserverInfo>());
-        }
+                WeakReference<Action<TObserved>> current = list[index];
 
-        private void AddObserver<TPayload>(object observer, Action<TObserved, TPayload> action)
-        {
-            ObserverPayloadInfo<TPayload> info = new ObserverPayloadInfo<TPayload>(observer, action);
-
-            if (_observers.TryGetValue(observer, out ObserverInfoLists lists))
-            {
-                lists.observersWithPayload.Add(info);
-                return;
+                if (current.TryGetTarget(out Action<TObserved> target) && target == action)
+                {
+                    return true;
+                }
             }
 
-            _observers[observer] = new ObserverInfoLists(
-                new List<IObserverInfo>(), 
-                new List<IObserverInfo> { info }
-            );
+            return false;
+        }
+
+        private bool Contains<TPayload>(List<IObserverInfo> list, Action<TObserved, TPayload> action)
+        {
+            for (int index = 0; index < list.Count; index++)
+            {
+                IObserverInfo current = list[index];
+                if (current is ObserverPayloadInfo<TPayload> info && info.Equals(action))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private void NotifyObservers(TObserved observed)
         {
-            _isIterating = true;
-            Dictionary<object, ObserverInfoLists>.Enumerator enumerator = _observers.GetEnumerator();
-            while (enumerator.MoveNext())
+            for (int index = 0; index < _keys.Count; index++)
             {
-                KeyValuePair<object, ObserverInfoLists> pair = enumerator.Current;
-                ObserverInfoLists lists = pair.Value;
-                List<IObserverInfo> observerInfos = lists.observers;
-                for (int index = 0; index < observerInfos.Count; index++)
+                WeakReference<object> key = _keys[index];
+
+                if (!_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list)) continue;
+
+                for (int observerIndex = 0; observerIndex < list.Count; observerIndex++)
                 {
-                    IObserverInfo info = observerInfos[index];
-                    if (info is ObserverInfo observerInfo)
-                    {
-                        observerInfo.Invoke(observed);
-                        continue;
-                    }
+                    if (!list[observerIndex].TryGetTarget(out Action<TObserved> current)) continue;
+
+                    current?.Invoke(observed);
                 }
             }
-            _isIterating = false;
-
-            CleanUpObserversIfNeeded();
         }
 
         private void NotifyObservers<TPayload>(TObserved observed, TPayload payload)
         {
-            _isIterating = true;
-            Dictionary<object, ObserverInfoLists>.Enumerator enumerator = _observers.GetEnumerator();
-            while (enumerator.MoveNext())
+            for (int index = 0; index < _keys.Count; index++)
             {
-                KeyValuePair<object, ObserverInfoLists> pair = enumerator.Current;
-                ObserverInfoLists lists = pair.Value;
-                List<IObserverInfo> observerInfos = lists.observersWithPayload;
-                for (int index = 0; index < observerInfos.Count; index++)
+                WeakReference<object> key = _keys[index];
+
+                if (!_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list)) continue;
+
+                for (int observerIndex = 0; observerIndex < list.Count; observerIndex++)
                 {
-                    IObserverInfo info = observerInfos[index];
-                    if (info is ObserverPayloadInfo<TPayload> observerInfo)
-                    {
-                        observerInfo.Invoke(observed, payload);
-                    }
+                    ObserverPayloadInfo<TPayload> current = (ObserverPayloadInfo<TPayload>)list[observerIndex];
+
+                    if (!current.weakAction.TryGetTarget(out Action<TObserved, TPayload> target)) continue;
+
+                    target.Invoke(observed, payload);
                 }
             }
-            _isIterating = false;
-
-            CleanUpObserversIfNeeded();
         }
 
-        private void CleanUpObserversIfNeeded()
+        private void OnObserverDestructed(ADestructorObserver observer)
         {
-            if (_observersToRemove.Count == 0) return;
+            observer.destructorObservable.StopObserving(this, OnObserverDestructed);
 
-            for (int index = 0; index < _observersToRemove.Count; index++)
+            StopObservingAll(observer);
+        }
+
+#if UNITY_INCLUDE_TESTS
+        private void OnObserverDestroyed(AObservableBehaviour observer)
+        {
+            observer.onDestroyObservable.StopObserving(this, OnObserverDestroyed);
+
+            StopObservingAll(observer);
+        }
+#endif
+
+        public interface IObserverInfo { }
+
+        internal readonly struct ObserverPayloadInfo<TPayload> : IObserverInfo, IEquatable<Action<TObserved, TPayload>>, IEquatable<ObserverPayloadInfo<TPayload>.ActionContainer>
+        {
+            public readonly WeakReference<Action<TObserved, TPayload>> weakAction;
+
+            public ObserverPayloadInfo(Action<TObserved, TPayload> action)
             {
-                object observer = _observersToRemove[index];
-                _ = _observers.Remove(observer);
-            }
-
-            _observersToRemove.Clear();
-        }
-
-        private void OnObserverDestructed(ADestructorObservable destructorObservable)
-        {
-            StopObserving(destructorObservable);
-
-            if (_isIterating) _observersToRemove.AddRange(_observers.Keys);
-            else _observers.Clear();
-        }
-
-        private void OnObserverDestroyed(AObservableBehaviour destroyingBehaviour)
-        {
-            StopObserving(destroyingBehaviour);
-
-            if (_isIterating) _observersToRemove.AddRange(_observers.Keys);
-            else _observers.Clear();
-        }
-
-        private interface IObserverInfo
-        {
-            object observer { get; }
-        }
-
-        private readonly struct ObserverInfo : IObserverInfo
-        {
-            public object observer { get; }
-            public readonly Action<TObserved> action;
-
-            public ObserverInfo(object observer, Action<TObserved> action)
-            {
-                this.observer = observer;
-                this.action = action;
-            }
-
-            public void Invoke(TObserved observed)
-            {
-                action?.Invoke(observed);
-            }
-        }
-
-        private readonly struct ObserverPayloadInfo<TPayload> : IObserverInfo
-        {
-            public object observer { get; }
-            public readonly Action<TObserved, TPayload> payloadAction;
-
-            public ObserverPayloadInfo(object observer, Action<TObserved, TPayload> action)
-            {
-                this.observer = observer;
-                payloadAction = action;
+                weakAction = new WeakReference<Action<TObserved, TPayload>>(action);
             }
 
             public void Invoke(TObserved observed, TPayload payload)
             {
-                payloadAction?.Invoke(observed, payload);
+                if (!weakAction.TryGetTarget(out Action<TObserved, TPayload> action)) return;
+
+                action.Invoke(observed, payload);
             }
-        }
 
-        private readonly struct ObserverInfoLists
-        {
-            public readonly List<IObserverInfo> observers;
-            public readonly List<IObserverInfo> observersWithPayload;
-
-            public ObserverInfoLists(List<IObserverInfo> observers, List<IObserverInfo> observersWithPayload)
+            public bool Equals(Action<TObserved, TPayload> other)
             {
-                this.observers = observers;
-                this.observersWithPayload = observersWithPayload;
+                if (!weakAction.TryGetTarget(out Action<TObserved, TPayload> target)) return false;
+
+                return target.Equals(other);
+            }
+
+            public bool Equals(ActionContainer container)
+            {
+                return Equals(container.action);
+            }
+
+            internal readonly struct ActionContainer : IObserverInfo
+            {
+                public readonly Action<TObserved, TPayload> action;
+
+                public ActionContainer(Action<TObserved, TPayload> action)
+                {
+                    this.action = action;
+                }
             }
         }
     }
