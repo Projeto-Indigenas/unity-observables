@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <BaseDirectory>..\Assets\Runtime</BaseDirectory>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <Optimize>false</Optimize>
+    <DefineConstants>TRACE;DEBUG;NETCOREAPP;NETCOREAPP3_1;OBSERVABLES_DEVELOPMENT;ENABLE_OBSERVABLE_LOGS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove=".DS_Store" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Assets\Runtime\ADestructorObserver.cs">
+      <Link>ADestructorObserver.cs</Link>
+    </Compile>
+    <Compile Include="..\Assets\Runtime\AObservableBehaviour.cs">
+      <Link>AObservableBehaviour.cs</Link>
+    </Compile>
+    <Compile Include="..\Assets\Runtime\Observable.cs">
+      <Link>Observable.cs</Link>
+    </Compile>
+    <Compile Include="..\Assets\Runtime\Logger.cs" />
+    <Compile Include="..\Assets\Runtime\Extensions\Extensions.cs" />
+  </ItemGroup>
+</Project>
