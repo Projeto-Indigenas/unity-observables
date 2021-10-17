@@ -1,11 +1,5 @@
 using NUnit.Framework;
-using Observables;
 using System;
-using System.Reflection;
-using System.Collections.Generic;
-using System.Threading;
-using System.Runtime.CompilerServices;
-using System.Collections;
 
 #if UNITY_INCLUDE_TESTS
 using UnityEngine;
@@ -16,6 +10,25 @@ namespace Observables.Tests
 {
     public class ObservablesTests 
     {
+        [Test]
+        public void TestWeakReferenceGC()
+        {
+            WeakReference<DestructorMock> weakReference = new WeakReference<DestructorMock>(null);
+
+            new Action(() =>
+            {
+                DestructorMock instance = new DestructorMock();
+                weakReference.SetTarget(instance);
+                instance = null;
+
+            }).Invoke();
+
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false);
+            GC.WaitForPendingFinalizers();
+
+            Assert.IsFalse(weakReference.TryGetTarget(out _));
+        }
+
         [Test]
         public void TestObservables() 
         {
@@ -35,7 +48,7 @@ namespace Observables.Tests
 
             Assert.AreEqual(1, callCount);
 
-            observable.StopObserving(this, action);
+            observable.RemoveObserver(this, action);
 
             Observable<float>.InvokeMessage(observable, 2F);
 
@@ -45,49 +58,39 @@ namespace Observables.Tests
         [Test]
         public void TestDestructorObservable() 
         {
-            Observable<float> observable = new Observable<float>();
-            List<WeakReference<object>> keys = GetValue<List<WeakReference<object>>>("_keys", observable);
+            Observable<int> observable = new Observable<int>();
 
             new Action(() =>
             {
                 DestructorMock observer = new DestructorMock();
-                observable.Observe(observer, value => { });
+                observable.Observe(observer, observer.ObserverAction);
                 observer = null;
             }).Invoke();
 
-            Assert.AreEqual(1, keys.Count);
+            Observable<int>.InvokeMessage(observable, 1);
 
-            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
+            Assert.AreEqual(1, DestructorMock.value);
+
+            Observable<int>.InvokeMessage(observable, 10);
+
+            Assert.AreEqual(11, DestructorMock.value);
+
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false);
             GC.WaitForPendingFinalizers();
 
-            Assert.AreEqual(0, keys.Count);
-        }
+            Observable<int>.InvokeMessage(observable, 1);
 
-        [Test]
-        public void TestWeakReferenceGC()
-        {
-            DestructorMock instance = new DestructorMock();
-            WeakReference<DestructorMock> weakReference = new WeakReference<DestructorMock>(instance);
-            instance = null;
-
-            for (int index = 0; index < 5; index++)
-            {
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
-                GC.WaitForPendingFinalizers();
-            }
-            
-            Assert.IsFalse(weakReference.TryGetTarget(out _));
-        }
-
-        private TResult GetValue<TResult>(string name, object target)
-            where TResult : class
-        {
-            const BindingFlags bindingFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-            Type type = target.GetType();
-            FieldInfo fieldInfo = type.GetField(name, bindingFlags);
-            return (TResult)fieldInfo.GetValue(target);
+            Assert.AreEqual(11, DestructorMock.value);
         }
     }
 
-    class DestructorMock : ADestructorObserver { }
+    class DestructorMock : ADestructorObserver 
+    {
+        public static int value = 0;
+
+        public void ObserverAction(int value)
+        {
+            DestructorMock.value += value;
+        }
+    }
 }

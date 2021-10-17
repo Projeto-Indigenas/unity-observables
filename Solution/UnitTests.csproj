@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net48</TargetFramework>
 
     <IsPackable>false</IsPackable>
     <BaseDirectory>..\Assets\Tests</BaseDirectory>
@@ -9,7 +9,12 @@
 
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
+    <Optimize>False</Optimize>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NUnit" Version="3.13.2" />
@@ -21,6 +26,7 @@
     <Compile Include="..\Assets\Tests\ObservablesTests.cs">
       <Link>ObservablesTests.cs</Link>
     </Compile>
+    <Compile Include="..\Assets\Tests\ObserverPayloadInfoTests.cs" Link="ObserverPayloadInfoTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="UnityObservables.csproj" />
