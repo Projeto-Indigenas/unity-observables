@@ -1,15 +1,26 @@
 using NUnit.Framework;
 using System;
+using System.Collections;
 
 #if UNITY_INCLUDE_TESTS
 using UnityEngine;
 using UnityEngine.TestTools;
+using Object = UnityEngine.Object;
 #endif
 
 namespace Observables.Tests 
 {
     public class ObservablesTests 
     {
+        [SetUp]
+        public void SetUp()
+        {
+            DestructorMock.actionCallCount = 0;
+            DestructorMock.actionWithPayloadCallCount = 0;
+            UnityDestroyableMock.actionCallCount = 0;
+            UnityDestroyableMock.actionWithPayloadCallCount = 0;
+        }
+
         [Test]
         public void TestWeakReferenceGC()
         {
@@ -113,6 +124,43 @@ namespace Observables.Tests
 
             Assert.AreEqual(5, DestructorMock.actionWithPayloadCallCount);
         }
+
+#if UNITY_2019_1_OR_NEWER
+        [UnityTest]
+        public IEnumerator TestDestroyingObservableObjects()
+        {
+            Observable<int> observable = new Observable<int>();
+
+            UnityDestroyableMock mock = new GameObject().AddComponent<UnityDestroyableMock>();
+            observable.Observe(mock, mock.ObserverAction);
+            observable.Observe<float>(mock, mock.ObservverWithPayloadAction);
+
+            Observable<int>.InvokeMessage(observable, 2);
+            Observable<int>.InvokeMessage(observable, 2, 0F);
+
+            Assert.AreEqual(2, UnityDestroyableMock.actionCallCount);
+            Assert.AreEqual(2, UnityDestroyableMock.actionWithPayloadCallCount);
+
+            Observable<int>.InvokeMessage(observable, 20);
+            Observable<int>.InvokeMessage(observable, 10, 0F);
+
+            Assert.AreEqual(22, UnityDestroyableMock.actionCallCount);
+            Assert.AreEqual(12, UnityDestroyableMock.actionWithPayloadCallCount);
+
+            Object.DestroyImmediate(mock.gameObject);
+
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false);
+            GC.WaitForPendingFinalizers();
+
+            yield return null;
+
+            Observable<int>.InvokeMessage(observable, 20);
+            Observable<int>.InvokeMessage(observable, 10, 0F);
+
+            Assert.AreEqual(22, UnityDestroyableMock.actionCallCount);
+            Assert.AreEqual(12, UnityDestroyableMock.actionWithPayloadCallCount);
+        }
+#endif
     }
 
     class DestructorMock : ADestructorObserver 
@@ -126,6 +174,22 @@ namespace Observables.Tests
         }
 
         public void ObserverWithPayloadAction(int value, float other)
+        {
+            actionWithPayloadCallCount += value;
+        }
+    }
+
+    class UnityDestroyableMock : ADestroyableObserver
+    {
+        public static int actionCallCount = 0;
+        public static int actionWithPayloadCallCount = 0;
+
+        public void ObserverAction(int value)
+        {
+            actionCallCount += value;
+        }
+
+        public void ObservverWithPayloadAction(int value, float other)
         {
             actionWithPayloadCallCount += value;
         }

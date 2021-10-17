@@ -7,6 +7,7 @@
         ~ADestructorObserver()
         {
             Logger.Log($"~ADestructorObservable() called for {this}");
+
             Observable<ADestructorObserver>.InvokeMessage(destructorObservable, this);
         }
     }

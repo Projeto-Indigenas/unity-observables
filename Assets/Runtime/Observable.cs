@@ -148,7 +148,7 @@ namespace Observables
             }
 
 #if UNITY_2019_1_OR_NEWER
-            if (observer is AObservableBehaviour observableBehaviour)
+            if (observer is ADestroyableObserver observableBehaviour)
             {
                 observableBehaviour.onDestroyObservable.Observe(this, OnObserverDestroyed);
 
@@ -253,7 +253,7 @@ namespace Observables
         }
 
 #if UNITY_INCLUDE_TESTS
-        private void OnObserverDestroyed(AObservableBehaviour observer)
+        private void OnObserverDestroyed(ADestroyableObserver observer)
         {
             observer.onDestroyObservable.RemoveObserver(this, OnObserverDestroyed);
 
