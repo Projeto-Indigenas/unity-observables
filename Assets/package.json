@@ -1,0 +1,14 @@
+{
+    "name": "br.com.andersonlucasg3.unity-observables",
+    "version": "0.1.0",
+    "displayName": "Unity Observables",
+    "description": "A notification system that automatically manages unregister destroyed observers",
+    "unity": "2020.3",
+    "unityRelease": "5f1",
+    "dependencies": { },
+    "author": {
+      "name": "Anderson Lucas C. Ramos",
+      "email": "andersonlucasg3@hotmail.com",
+      "url": "https://github.com/andersonlucasg3"
+    }
+  }
