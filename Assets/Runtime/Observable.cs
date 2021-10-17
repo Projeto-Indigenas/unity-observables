@@ -17,7 +17,7 @@ namespace Observables
         private readonly Dictionary<long, List<WeakReference<Action<TObserved>>>> _observers = new Dictionary<long, List<WeakReference<Action<TObserved>>>>();
         private readonly Dictionary<long, List<IObserverInfo>> _observersWithPayload = new Dictionary<long, List<IObserverInfo>>();
 
-        public void Observe(object observer, Action<TObserved> action)
+        public void Observe(object observer, Action<TObserved> action, bool willBeUnregisteredManually = false)
         {
             long key = GetId(observer, out bool shouldAdd);
 
@@ -36,10 +36,10 @@ namespace Observables
 
             if (shouldAdd) _keys.Add(key);
 
-            SetupDestructor(observer);
+            SetupDestructor(observer, willBeUnregisteredManually);
         }
 
-        public void Observe<TPayload>(object observer, Action<TObserved, TPayload> action)
+        public void Observe<TPayload>(object observer, Action<TObserved, TPayload> action, bool willBeUnregisteredManually = false)
         {
             long key = GetId(observer, out bool shouldAdd);
 
@@ -58,7 +58,7 @@ namespace Observables
 
             if (shouldAdd) _keys.Add(key);
 
-            SetupDestructor(observer);
+            SetupDestructor(observer, willBeUnregisteredManually);
         }
 
         public void RemoveObserver(object observer, Action<TObserved> action)
@@ -132,7 +132,13 @@ namespace Observables
 #endif
         }
 
-        private void SetupDestructor(object observer)
+        private void SetupDestructor(object observer, bool
+#if OBSERVABLES_DEVELOPMENT
+            willBeUnregisteredManually
+#else
+            _
+#endif
+            )
         {
             if (observer is ADestructorObserver destructorObserver)
             {
@@ -153,7 +159,7 @@ namespace Observables
 #if OBSERVABLES_DEVELOPMENT
             Type observerType = observer.GetType();
             bool isObservable = observerType.IsGenericType && observerType.GetGenericTypeDefinition() == typeof(Observable<>);
-            if (isObservable) return;
+            if (isObservable || willBeUnregisteredManually) return;
 
             Logger.Log($"Observer is not either DestructorObservable nor ObservableBehaviour. " +
                 $"It should inherit from one of them or stop observing manually.\n" +

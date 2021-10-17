@@ -56,7 +56,7 @@ namespace Observables.Tests
         }
 
         [Test]
-        public void TestUnregisterByTarget()
+        public void TestUnregister()
         {
             int callCount = 0;
 
