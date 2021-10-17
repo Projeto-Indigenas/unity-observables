@@ -3,11 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
-#if UNITY_2019_1_OR_NEWER
-using UnityEditor;
-using UnityEngine;
-#endif
-
 namespace Observables
 {
     public class Observable<TObserved>
@@ -168,11 +163,16 @@ namespace Observables
 
         private bool Contains(List<WeakReference<Action<TObserved>>> list, Action<TObserved> action)
         {
-            for (int index = 0; index < list.Count; index++)
+            for (int index = list.Count - 1; index >= 0; index--)
             {
                 WeakReference<Action<TObserved>> current = list[index];
 
-                if (!current.TryGetTarget(out Action<TObserved> target)) continue;
+                if (!current.TryGetTarget(out Action<TObserved> target))
+                {
+                    list.RemoveAt(index);
+
+                    continue;
+                }
 
                 if (target.Equals(action)) return true;
             }
@@ -201,11 +201,16 @@ namespace Observables
 
                 if (!_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list)) continue;
 
-                for (int observerIndex = 0; observerIndex < list.Count; observerIndex++)
+                for (int observerIndex = list.Count - 1; observerIndex >= 0; observerIndex--)
                 {
                     WeakReference<Action<TObserved>> current = list[observerIndex];
 
-                    if (!current.TryGetTarget(out Action<TObserved> target)) continue;
+                    if (!current.TryGetTarget(out Action<TObserved> target))
+                    {
+                        list.RemoveAt(observerIndex);
+
+                        continue;
+                    }
 
                     target?.Invoke(observed);
                 }

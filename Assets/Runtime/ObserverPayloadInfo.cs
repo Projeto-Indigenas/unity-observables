@@ -1,37 +1,63 @@
 ﻿using System;
 using System.Collections.Generic;
 
-#if UNITY_2019_1_OR_NEWER
-using UnityEditor;
-using UnityEngine;
-#endif
-
 namespace Observables
 {
     public class ObserverPayloadInfo<TObserved, TPayload> : IObserverInfo
     {
-        private readonly List<Action<TObserved, TPayload>> _observerEvents = new List<Action<TObserved, TPayload>>();
+        private readonly List<WeakReference<Action<TObserved, TPayload>>> _observerEvents = new List<WeakReference<Action<TObserved, TPayload>>>();
 
         public ObserverPayloadInfo(Action<TObserved, TPayload> action)
         {
-            _observerEvents.Add(action);
+            _observerEvents.Add(new WeakReference<Action<TObserved, TPayload>>(action));
         }
 
         public void Register(Action<TObserved, TPayload> action)
         {
-            if (_observerEvents.Contains(action)) return;
+            if (IsRegistered(action)) return;
 
-            _observerEvents.Add(action);
+            _observerEvents.Add(new WeakReference<Action<TObserved, TPayload>>(action));
         }
 
         public void Unregister(Action<TObserved, TPayload> action)
         {
-            _observerEvents.Remove(action);
+            for (int index = _observerEvents.Count - 1; index >= 0; index--)
+            {
+                WeakReference<Action<TObserved, TPayload>> current = _observerEvents[index];
+
+                if (!current.TryGetTarget(out Action<TObserved, TPayload> target))
+                {
+                    _observerEvents.RemoveAt(index);
+
+                    continue;
+                }
+
+                if (target.Equals(action))
+                {
+                    _observerEvents.RemoveAt(index);
+
+                    return;
+                }
+            }
         }
 
         public bool IsRegistered(Action<TObserved, TPayload> action)
         {
-            return _observerEvents.Contains(action);
+            for (int index = _observerEvents.Count - 1; index >= 0; index--)
+            {
+                WeakReference<Action<TObserved, TPayload>> current = _observerEvents[index];
+
+                if (!current.TryGetTarget(out Action<TObserved, TPayload> target))
+                {
+                    _observerEvents.RemoveAt(index);
+
+                    continue;
+                }
+
+                if (target.Equals(action)) return true;
+            }
+
+            return false;
         }
 
         public void Clear()
@@ -41,11 +67,18 @@ namespace Observables
 
         public void Invoke(TObserved observed, TPayload payload)
         {
-            for (int index = 0; index < _observerEvents.Count; index++)
+            for (int index = _observerEvents.Count - 1; index >= 0; index--)
             {
-                Action<TObserved, TPayload> current = _observerEvents[index];
+                WeakReference<Action<TObserved, TPayload>> current = _observerEvents[index];
 
-                current?.Invoke(observed, payload);
+                if (!current.TryGetTarget(out Action<TObserved, TPayload> target)) 
+                {
+                    _observerEvents.RemoveAt(index);
+
+                    continue; 
+                }
+
+                target?.Invoke(observed, payload);
             }
         }
     }

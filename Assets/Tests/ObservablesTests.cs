@@ -65,32 +65,69 @@ namespace Observables.Tests
                 DestructorMock observer = new DestructorMock();
                 observable.Observe(observer, observer.ObserverAction);
                 observer = null;
+
             }).Invoke();
 
             Observable<int>.InvokeMessage(observable, 1);
 
-            Assert.AreEqual(1, DestructorMock.value);
+            Assert.AreEqual(1, DestructorMock.actionCallCount);
 
             Observable<int>.InvokeMessage(observable, 10);
 
-            Assert.AreEqual(11, DestructorMock.value);
+            Assert.AreEqual(11, DestructorMock.actionCallCount);
 
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false);
             GC.WaitForPendingFinalizers();
 
             Observable<int>.InvokeMessage(observable, 1);
 
-            Assert.AreEqual(11, DestructorMock.value);
+            Assert.AreEqual(11, DestructorMock.actionCallCount);
+        }
+
+        [Test]
+        public void TestDestructorObservableWithPayload()
+        {
+            Observable<int> observable = new Observable<int>();
+
+            new Action(() =>
+            {
+                DestructorMock observer = new DestructorMock();
+                observable.Observe<float>(observer, observer.ObserverWithPayloadAction);
+                observer = null;
+
+            }).Invoke();
+
+            Observable<int>.InvokeMessage(observable, 1, 1F);
+
+            Assert.AreEqual(1, DestructorMock.actionWithPayloadCallCount);
+
+            Observable<int>.InvokeMessage(observable, 2, 2F);
+            Observable<int>.InvokeMessage(observable, 2, 2F);
+
+            Assert.AreEqual(5, DestructorMock.actionWithPayloadCallCount);
+
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false);
+            GC.WaitForPendingFinalizers();
+
+            Observable<int>.InvokeMessage(observable, 10, 1F);
+
+            Assert.AreEqual(5, DestructorMock.actionWithPayloadCallCount);
         }
     }
 
     class DestructorMock : ADestructorObserver 
     {
-        public static int value = 0;
+        public static int actionCallCount = 0;
+        public static int actionWithPayloadCallCount = 0;
 
         public void ObserverAction(int value)
         {
-            DestructorMock.value += value;
+            actionCallCount += value;
+        }
+
+        public void ObserverWithPayloadAction(int value, float other)
+        {
+            actionWithPayloadCallCount += value;
         }
     }
 }
