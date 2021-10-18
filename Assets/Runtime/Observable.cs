@@ -1,9 +1,11 @@
-﻿using Observables.Destructors;
+﻿using JetBrains.Annotations;
+using Observables.Destructors;
 using Observables.Extensions;
 using Observables.Logging;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Security.Policy;
 
 namespace Observables
 {
@@ -19,8 +21,22 @@ namespace Observables
         private readonly Dictionary<long, List<WeakReference<Action<TObserved>>>> _observers = new Dictionary<long, List<WeakReference<Action<TObserved>>>>();
         private readonly Dictionary<long, List<IObserverInfo>> _observersWithPayload = new Dictionary<long, List<IObserverInfo>>();
 
-        public void Observe(object observer, Action<TObserved> action, bool willBeUnregisteredManually = false)
+        public static Observable<TObserved> operator +(Observable<TObserved> observable, Action<TObserved> action)
         {
+            observable.Observe(action);
+            return observable;
+        }
+
+        public static Observable<TObserved> operator -(Observable<TObserved> observable, Action<TObserved> action)
+        {
+            observable.RemoveObserver(action);
+            return observable;
+        }
+
+        public void Observe(Action<TObserved> action, bool willBeUnregisteredManually = false)
+        {
+            object observer = action.Target;
+
             long key = GetId(observer, out bool shouldAdd);
 
             if (_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list))
@@ -41,8 +57,10 @@ namespace Observables
             SetupDestructor(observer, willBeUnregisteredManually);
         }
 
-        public void Observe<TPayload>(object observer, Action<TObserved, TPayload> action, bool willBeUnregisteredManually = false)
+        public void Observe<TPayload>(Action<TObserved, TPayload> action, bool willBeUnregisteredManually = false)
         {
+            object observer = action.Target;
+
             long key = GetId(observer, out bool shouldAdd);
 
             if (_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list))
@@ -63,8 +81,10 @@ namespace Observables
             SetupDestructor(observer, willBeUnregisteredManually);
         }
 
-        public void RemoveObserver(object observer, Action<TObserved> action)
+        public void RemoveObserver(Action<TObserved> action)
         {
+            object observer = action.Target;
+
             long key = GetId(observer, out _);
 
             if (!_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list)) return;
@@ -74,8 +94,10 @@ namespace Observables
             _searchingAction = null;
         }
 
-        public void RemoveObserver<TPayload>(object observer, Action<TObserved, TPayload> action)
+        public void RemoveObserver<TPayload>(Action<TObserved, TPayload> action)
         {
+            object observer = action.Target;
+
             long key = GetId(observer, out _);
 
             if (!_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list)) return;
@@ -144,7 +166,7 @@ namespace Observables
         {
             if (observer is ADestructorObserver destructorObserver)
             {
-                destructorObserver.destructorObservable.Observe(this, OnObserverDestructed);
+                destructorObserver.destructorObservable.Observe(OnObserverDestructed);
 
                 return;
             }
@@ -152,7 +174,7 @@ namespace Observables
 #if UNITY_2019_1_OR_NEWER
             if (observer is ADestroyableObserver observableBehaviour)
             {
-                observableBehaviour.onDestroyObservable.Observe(this, OnObserverDestroyed);
+                observableBehaviour.onDestroyObservable.Observe(OnObserverDestroyed);
 
                 return;
             }
@@ -246,7 +268,7 @@ namespace Observables
 
         private void OnObserverDestructed(ADestructorObserver observer)
         {
-            observer.destructorObservable.RemoveObserver(this, OnObserverDestructed);
+            observer.destructorObservable.RemoveObserver(OnObserverDestructed);
 
             long key = GetId(observer, out _);
             _keys.Remove(key);
@@ -257,7 +279,7 @@ namespace Observables
 #if UNITY_INCLUDE_TESTS
         private void OnObserverDestroyed(ADestroyableObserver observer)
         {
-            observer.onDestroyObservable.RemoveObserver(this, OnObserverDestroyed);
+            observer.onDestroyObservable.RemoveObserver(OnObserverDestroyed);
 
             long key = GetId(observer, out _);
             _keys.Remove(key);

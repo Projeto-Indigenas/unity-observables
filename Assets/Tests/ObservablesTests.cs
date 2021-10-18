@@ -55,13 +55,39 @@ namespace Observables.Tests
                 Assert.AreEqual(1F, value);
             };
 
-            observable.Observe(this, action);
+            observable.Observe(action);
 
             Observable<float>.InvokeMessage(observable, 1F);
 
             Assert.AreEqual(1, callCount);
 
-            observable.RemoveObserver(this, action);
+            observable.RemoveObserver(action);
+
+            Observable<float>.InvokeMessage(observable, 2F);
+
+            Assert.AreEqual(1, callCount);
+        }
+
+        [Test]
+        public void TestObservablesOperatorOverloading()
+        {
+            int callCount = 0;
+
+            Observable<float> observable = new Observable<float>();
+
+            Action<float> action = value =>
+            {
+                callCount += 1;
+                Assert.AreEqual(1F, value);
+            };
+
+            observable += action;
+
+            Observable<float>.InvokeMessage(observable, 1F);
+
+            Assert.AreEqual(1, callCount);
+
+            observable -= action;
 
             Observable<float>.InvokeMessage(observable, 2F);
 
@@ -76,7 +102,36 @@ namespace Observables.Tests
             new Action(() =>
             {
                 DestructorMock observer = new DestructorMock();
-                observable.Observe(observer, observer.ObserverAction);
+                observable.Observe(observer.ObserverAction);
+                observer = null;
+
+            }).Invoke();
+
+            Observable<int>.InvokeMessage(observable, 1);
+
+            Assert.AreEqual(1, DestructorMock.actionCallCount);
+
+            Observable<int>.InvokeMessage(observable, 10);
+
+            Assert.AreEqual(11, DestructorMock.actionCallCount);
+
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false);
+            GC.WaitForPendingFinalizers();
+
+            Observable<int>.InvokeMessage(observable, 1);
+
+            Assert.AreEqual(11, DestructorMock.actionCallCount);
+        }
+
+        [Test]
+        public void TestDestructorObservableOperatorOverloading()
+        {
+            Observable<int> observable = new Observable<int>();
+
+            new Action(() =>
+            {
+                DestructorMock observer = new DestructorMock();
+                observable += observer.ObserverAction;
                 observer = null;
 
             }).Invoke();
@@ -105,7 +160,7 @@ namespace Observables.Tests
             new Action(() =>
             {
                 DestructorMock observer = new DestructorMock();
-                observable.Observe<float>(observer, observer.ObserverWithPayloadAction);
+                observable.Observe<float>(observer.ObserverWithPayloadAction);
                 observer = null;
 
             }).Invoke();
@@ -134,8 +189,43 @@ namespace Observables.Tests
             Observable<int> observable = new Observable<int>();
 
             UnityDestroyableMock mock = new GameObject().AddComponent<UnityDestroyableMock>();
-            observable.Observe(mock, mock.ObserverAction);
-            observable.Observe<float>(mock, mock.ObservverWithPayloadAction);
+            observable.Observe(mock.ObserverAction);
+            observable.Observe<float>(mock.ObservverWithPayloadAction);
+
+            Observable<int>.InvokeMessage(observable, 2);
+            Observable<int>.InvokeMessage(observable, 2, 0F);
+
+            Assert.AreEqual(2, UnityDestroyableMock.actionCallCount);
+            Assert.AreEqual(2, UnityDestroyableMock.actionWithPayloadCallCount);
+
+            Observable<int>.InvokeMessage(observable, 20);
+            Observable<int>.InvokeMessage(observable, 10, 0F);
+
+            Assert.AreEqual(22, UnityDestroyableMock.actionCallCount);
+            Assert.AreEqual(12, UnityDestroyableMock.actionWithPayloadCallCount);
+
+            Object.DestroyImmediate(mock.gameObject);
+
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false);
+            GC.WaitForPendingFinalizers();
+
+            yield return null;
+
+            Observable<int>.InvokeMessage(observable, 20);
+            Observable<int>.InvokeMessage(observable, 10, 0F);
+
+            Assert.AreEqual(22, UnityDestroyableMock.actionCallCount);
+            Assert.AreEqual(12, UnityDestroyableMock.actionWithPayloadCallCount);
+        }
+
+        [UnityTest]
+        public IEnumerator TestDestroyingObservableObjectsOperatorOverloading()
+        {
+            Observable<int> observable = new Observable<int>();
+
+            UnityDestroyableMock mock = new GameObject().AddComponent<UnityDestroyableMock>();
+            observable += mock.ObserverAction;
+            observable.Observe<float>(mock.ObservverWithPayloadAction);
 
             Observable<int>.InvokeMessage(observable, 2);
             Observable<int>.InvokeMessage(observable, 2, 0F);
@@ -165,6 +255,32 @@ namespace Observables.Tests
 #endif
 
         [Test]
+        public void TestObservableOperatorOverloading()
+        {
+            Observable<int> observable = new Observable<int>();
+
+            DestructorMock mock = new DestructorMock();
+            observable += mock.ObserverAction;
+
+            Observable<int>.InvokeMessage(observable, 2);
+
+            Assert.AreEqual(2, DestructorMock.actionCallCount);
+
+            Observable<int>.InvokeMessage(observable, 20);
+
+            Assert.AreEqual(22, DestructorMock.actionCallCount);
+
+            mock = null;
+
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false);
+            GC.WaitForPendingFinalizers();
+
+            Observable<int>.InvokeMessage(observable, 20);
+
+            Assert.AreEqual(22, DestructorMock.actionCallCount);
+        }
+
+        [Test]
         public void MeasureInvokeTimes()
         {
             Stopwatch stopwatch = new Stopwatch();
@@ -173,11 +289,11 @@ namespace Observables.Tests
 
             UnityDestroyableMock goMock = new GameObject().AddComponent<UnityDestroyableMock>();
             DestructorMock mock = new DestructorMock();
-            observable.Observe(goMock, goMock.ObserverAction);
-            observable.Observe<float>(goMock, goMock.ObservverWithPayloadAction);
+            observable.Observe(goMock.ObserverAction);
+            observable.Observe<float>(goMock.ObservverWithPayloadAction);
 
-            observable.Observe(mock, mock.ObserverAction);
-            observable.Observe<float>(mock, mock.ObserverWithPayloadAction);
+            observable.Observe(mock.ObserverAction);
+            observable.Observe<float>(mock.ObserverWithPayloadAction);
 
             stopwatch.Start();
             Observable<int>.InvokeMessage(observable, 0);
