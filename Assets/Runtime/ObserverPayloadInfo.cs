@@ -60,11 +60,6 @@ namespace Observables
             return false;
         }
 
-        public void Clear()
-        {
-            _observerEvents.Clear();
-        }
-
         public void Invoke(TObserved observed, TPayload payload)
         {
             for (int index = _observerEvents.Count - 1; index >= 0; index--)
