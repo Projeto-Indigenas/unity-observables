@@ -1,8 +1,9 @@
 ﻿#if UNITY_2019_1_OR_NEWER
 
 using UnityEngine;
+using Logger = Observables.Logging.Logger;
 
-namespace Observables
+namespace Observables.Destructors
 {
     public abstract class ADestroyableObserver : MonoBehaviour
     {

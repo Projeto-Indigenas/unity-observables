@@ -1,6 +1,8 @@
 using NUnit.Framework;
+using Observables.Destructors;
 using System;
 using System.Collections;
+using System.Diagnostics;
 
 #if UNITY_INCLUDE_TESTS
 using UnityEngine;
@@ -161,6 +163,34 @@ namespace Observables.Tests
             Assert.AreEqual(12, UnityDestroyableMock.actionWithPayloadCallCount);
         }
 #endif
+
+        [Test]
+        public void MeasureInvokeTimes()
+        {
+            Stopwatch stopwatch = new Stopwatch();
+
+            Observable<int> observable = new Observable<int>();
+
+            UnityDestroyableMock goMock = new GameObject().AddComponent<UnityDestroyableMock>();
+            DestructorMock mock = new DestructorMock();
+            observable.Observe(goMock, goMock.ObserverAction);
+            observable.Observe<float>(goMock, goMock.ObservverWithPayloadAction);
+
+            observable.Observe(mock, mock.ObserverAction);
+            observable.Observe<float>(mock, mock.ObserverWithPayloadAction);
+
+            stopwatch.Start();
+            Observable<int>.InvokeMessage(observable, 0);
+            stopwatch.Stop();
+
+            TestContext.Out.WriteLine($"Invoke message with 2 observers took {stopwatch.Elapsed.TotalMilliseconds} ms");
+
+            stopwatch.Restart();
+            Observable<int>.InvokeMessage<float>(observable, 0, 0F);
+            stopwatch.Stop();
+
+            TestContext.Out.WriteLine($"Invoke message with payload with 2 observers took {stopwatch.Elapsed.TotalMilliseconds} ms");
+        }
     }
 
     class DestructorMock : ADestructorObserver 

@@ -1,4 +1,6 @@
-﻿namespace Observables
+﻿using Observables.Logging;
+
+namespace Observables.Destructors
 {
     public abstract class ADestructorObserver
     {

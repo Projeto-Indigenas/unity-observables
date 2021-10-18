@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
 
-namespace Observables
+namespace Observables.Logging
 {
-    public static class Logger
+    internal static class Logger
     {
         [Conditional("ENABLE_OBSERVABLE_LOGS")]
         public static void Log(string message)
