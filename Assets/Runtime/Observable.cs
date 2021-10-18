@@ -1,11 +1,9 @@
-﻿using JetBrains.Annotations;
-using Observables.Destructors;
+﻿using Observables.Destructors;
 using Observables.Extensions;
 using Observables.Logging;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using System.Security.Policy;
 
 namespace Observables
 {
@@ -15,12 +13,13 @@ namespace Observables
         private static Action<TObserved> _searchingAction = default;
 
         private static long _currentId = long.MinValue;
+        private static readonly ConditionalWeakTable<object, IdHolder> _keysIds = new ConditionalWeakTable<object, IdHolder>();
 
-        private readonly List<long> _keys = new List<long>();
-        private readonly ConditionalWeakTable<object, IdHolder> _keysIds = new ConditionalWeakTable<object, IdHolder>();
         private readonly Dictionary<long, List<WeakReference<Action<TObserved>>>> _observers = new Dictionary<long, List<WeakReference<Action<TObserved>>>>();
-        private readonly Dictionary<long, List<IObserverInfo>> _observersWithPayload = new Dictionary<long, List<IObserverInfo>>();
+        private readonly Dictionary<Type, IObservable> _obserablesWithPayload = new Dictionary<Type, IObservable>();
 
+        internal readonly List<long> keys = new List<long>();
+        
         public static Observable<TObserved> operator +(Observable<TObserved> observable, Action<TObserved> action)
         {
             observable.Observe(action);
@@ -31,6 +30,18 @@ namespace Observables
         {
             observable.RemoveObserver(action);
             return observable;
+        }
+
+        public Observable<TObserved, TPayload> With<TPayload>()
+        {
+            if (_obserablesWithPayload.TryGetValue(typeof(TPayload), out IObservable observable))
+            {
+                return (Observable<TObserved, TPayload>)observable;
+            }
+
+            Observable<TObserved, TPayload> newObservable = new Observable<TObserved, TPayload>(this);
+            _obserablesWithPayload[typeof(TPayload)] = newObservable;
+            return newObservable;
         }
 
         public void Observe(Action<TObserved> action, bool willBeUnregisteredManually = false)
@@ -52,31 +63,7 @@ namespace Observables
             List<WeakReference<Action<TObserved>>> newList = new List<WeakReference<Action<TObserved>>> { weakAction };
             _observers.Add(key, newList);
 
-            if (shouldAdd) _keys.Add(key);
-
-            SetupDestructor(observer, willBeUnregisteredManually);
-        }
-
-        public void Observe<TPayload>(Action<TObserved, TPayload> action, bool willBeUnregisteredManually = false)
-        {
-            object observer = action.Target;
-
-            long key = GetId(observer, out bool shouldAdd);
-
-            if (_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list))
-            {
-                if (Contains(list, action)) return;
-
-                list.Add(new ObserverPayloadInfo<TObserved, TPayload>(action));
-
-                return;
-            }
-
-            IObserverInfo observerInfo = new ObserverPayloadInfo<TObserved, TPayload>(action);
-            List<IObserverInfo> newList = new List<IObserverInfo> { observerInfo };
-            _observersWithPayload.Add(key, newList);
-
-            if (shouldAdd) _keys.Add(key);
+            if (shouldAdd) keys.Add(key);
 
             SetupDestructor(observer, willBeUnregisteredManually);
         }
@@ -90,33 +77,19 @@ namespace Observables
             if (!_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list)) return;
 
             _searchingAction = action;
-            list.RemoveWhere(_searchActionPredicate);
+            _ = list.RemoveWhere(_searchActionPredicate);
             _searchingAction = null;
-        }
-
-        public void RemoveObserver<TPayload>(Action<TObserved, TPayload> action)
-        {
-            object observer = action.Target;
-
-            long key = GetId(observer, out _);
-
-            if (!_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list)) return;
-
-            for (int index = 0; index < list.Count; index++)
-            {
-                IObserverInfo current = list[index];
-
-                if (!(current is ObserverPayloadInfo<TObserved, TPayload> observerPayloadInfo)) continue;
-
-                observerPayloadInfo.Unregister(action);
-            }
         }
 
         public void ClearObservers()
         {
-            _keys.Clear();
+            keys.Clear();
             _observers.Clear();
-            _observersWithPayload.Clear();
+
+            foreach (IObservable each in _obserablesWithPayload.Values)
+            {
+                each.ClearObservers();
+            }
         }
 
         public static void InvokeMessage(Observable<TObserved> observable, TObserved observed)
@@ -137,26 +110,7 @@ namespace Observables
 #endif
         }
 
-        public static void InvokeMessage<TPayload>(Observable<TObserved> observable, TObserved observed, TPayload payload)
-        {
-#if OBSERVABLES_DEVELOPMENT
-            try
-            {
-#endif
-                observable.NotifyObservers(observed, payload);
-#if OBSERVABLES_DEVELOPMENT
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"Unexpected exception when invoking message. \n" +
-                    $"observed -> {observed}\n" +
-                    $"payload -> {payload}\n" +
-                    $"exception -> {ex}");
-            }
-#endif
-        }
-
-        private void SetupDestructor(object observer, bool
+        internal void SetupDestructor(object observer, bool
 #if OBSERVABLES_DEVELOPMENT
             willBeUnregisteredManually
 #else
@@ -210,24 +164,11 @@ namespace Observables
             return false;
         }
 
-        private bool Contains<TPayload>(List<IObserverInfo> list, Action<TObserved, TPayload> action)
-        {
-            for (int index = 0; index < list.Count; index++)
-            {
-                IObserverInfo current = list[index];
-                if (current is ObserverPayloadInfo<TObserved, TPayload> observerPayloadInfo)
-                {
-                    return observerPayloadInfo.IsRegistered(action);
-                }
-            }
-            return false;
-        }
-
         private void NotifyObservers(TObserved observed)
         {
-            for (int index = 0; index < _keys.Count; index++)
+            for (int index = 0; index < keys.Count; index++)
             {
-                long key = _keys[index];
+                long key = keys[index];
 
                 if (!_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list)) continue;
 
@@ -247,11 +188,150 @@ namespace Observables
             }
         }
 
-        private void NotifyObservers<TPayload>(TObserved observed, TPayload payload)
+        private void OnObserverDestructed(ADestructorObserver observer)
         {
-            for (int index = 0; index < _keys.Count; index++)
+            observer.destructorObservable.RemoveObserver(OnObserverDestructed);
+
+            long key = GetId(observer, out _);
+            _ = keys.Remove(key);
+            _ = _observers.Remove(key);
+
+            foreach (IObservable observable in _obserablesWithPayload.Values)
             {
-                long key = _keys[index];
+                observable.Remove(key);
+            }
+        }
+
+#if UNITY_INCLUDE_TESTS
+        private void OnObserverDestroyed(ADestroyableObserver observer)
+        {
+            observer.onDestroyObservable.RemoveObserver(OnObserverDestroyed);
+
+            long key = GetId(observer, out _);
+            _ = keys.Remove(key);
+            _ = _observers.Remove(key);
+
+            foreach (IObservable observable in _obserablesWithPayload.Values)
+            {
+                observable.Remove(key);
+            }
+        }
+#endif
+
+        internal static long GetId(object observer, out bool firstTime)
+        {
+            if (_keysIds.TryGetValue(observer, out IdHolder holder))
+            {
+                firstTime = false;
+                return holder.id;
+            }
+
+            _keysIds.Add(observer, holder = new IdHolder(_currentId++));
+            firstTime = true;
+            return holder.id;
+        }
+    }
+
+    interface IObservable
+    {
+        void Remove(long key);
+        void ClearObservers();
+    }
+
+    public class Observable<TObserved, TPayload> : IObservable
+    {
+        private readonly Dictionary<long, List<IObserverInfo>> _observersWithPayload = new Dictionary<long, List<IObserverInfo>>();
+        private readonly Observable<TObserved> _observable = default;
+
+        public Observable<TObserved, TPayload> observable
+        {
+            get => this;
+            set { }
+        }
+
+        public static Observable<TObserved, TPayload> operator +(Observable<TObserved, TPayload> observable, Action<TObserved, TPayload> action)
+        {
+            observable.Observe(action);
+            return observable;
+        }
+
+        public static Observable<TObserved, TPayload> operator -(Observable<TObserved, TPayload> observable, Action<TObserved, TPayload> action)
+        {
+            observable.RemoveObserver(action);
+            return observable;
+        }
+
+        internal Observable(Observable<TObserved> observable)
+        {
+            _observable = observable;
+        }
+
+        public void Observe(Action<TObserved, TPayload> action, bool willBeUnregisteredManually = false)
+        {
+            object observer = action.Target;
+
+            long key = Observable<TObserved>.GetId(observer, out bool shouldAdd);
+
+            if (_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list))
+            {
+                if (Contains(list, action)) return;
+
+                list.Add(new ObserverPayloadInfo<TObserved, TPayload>(action));
+
+                return;
+            }
+
+            IObserverInfo observerInfo = new ObserverPayloadInfo<TObserved, TPayload>(action);
+            List<IObserverInfo> newList = new List<IObserverInfo> { observerInfo };
+            _observersWithPayload.Add(key, newList);
+
+            if (shouldAdd) _observable.keys.Add(key);
+
+            _observable.SetupDestructor(observer, willBeUnregisteredManually);
+        }
+
+        public void RemoveObserver(Action<TObserved, TPayload> action)
+        {
+            object observer = action.Target;
+
+            long key = Observable<TObserved>.GetId(observer, out _);
+
+            if (!_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list)) return;
+
+            for (int index = 0; index < list.Count; index++)
+            {
+                IObserverInfo current = list[index];
+
+                if (!(current is ObserverPayloadInfo<TObserved, TPayload> observerPayloadInfo)) continue;
+
+                observerPayloadInfo.Unregister(action);
+            }
+        }
+
+        public static void InvokeMessage(Observable<TObserved, TPayload> observable, TObserved observed, TPayload payload)
+        {
+#if OBSERVABLES_DEVELOPMENT
+            try
+            {
+#endif
+                observable.NotifyObservers(observed, payload);
+#if OBSERVABLES_DEVELOPMENT
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"Unexpected exception when invoking message. \n" +
+                    $"observed -> {observed}\n" +
+                    $"payload -> {payload}\n" +
+                    $"exception -> {ex}");
+            }
+#endif
+        }
+
+        private void NotifyObservers(TObserved observed, TPayload payload)
+        {
+            for (int index = 0; index < _observable.keys.Count; index++)
+            {
+                long key = _observable.keys[index];
 
                 if (!_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list)) continue;
 
@@ -266,46 +346,38 @@ namespace Observables
             }
         }
 
-        private void OnObserverDestructed(ADestructorObserver observer)
+        private bool Contains(List<IObserverInfo> list, Action<TObserved, TPayload> action)
         {
-            observer.destructorObservable.RemoveObserver(OnObserverDestructed);
-
-            long key = GetId(observer, out _);
-            _keys.Remove(key);
-            _observers.Remove(key);
-            _observersWithPayload.Remove(key);
-        }
-
-#if UNITY_INCLUDE_TESTS
-        private void OnObserverDestroyed(ADestroyableObserver observer)
-        {
-            observer.onDestroyObservable.RemoveObserver(OnObserverDestroyed);
-
-            long key = GetId(observer, out _);
-            _keys.Remove(key);
-            _observers.Remove(key);
-            _observersWithPayload.Remove(key);
-        }
-#endif
-
-        private long GetId(object observer, out bool firstTime)
-        {
-            if (_keysIds.TryGetValue(observer, out IdHolder holder))
+            for (int index = 0; index < list.Count; index++)
             {
-                firstTime = false;
-                return holder.id;
+                IObserverInfo current = list[index];
+                if (current is ObserverPayloadInfo<TObserved, TPayload> observerPayloadInfo)
+                {
+                    return observerPayloadInfo.IsRegistered(action);
+                }
             }
-
-            _keysIds.Add(observer, holder = new IdHolder(_currentId++));
-            firstTime = true;
-            return holder.id;
+            return false;
         }
 
-        private class IdHolder
+        #region IObservable
+
+        void IObservable.Remove(long key)
         {
-            public readonly long id;
-
-            public IdHolder(long id) => this.id = id;
+            _ = _observersWithPayload.Remove(key);
         }
+
+        void IObservable.ClearObservers()
+        {
+            _observersWithPayload.Clear();
+        }
+
+        #endregion
+    }
+
+    class IdHolder
+    {
+        public readonly long id;
+
+        public IdHolder(long id) => this.id = id;
     }
 }

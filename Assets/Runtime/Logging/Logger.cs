@@ -1,5 +1,4 @@
-﻿using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 namespace Observables.Logging
 {
@@ -11,7 +10,7 @@ namespace Observables.Logging
 #if UNITY_2019_1_OR_NEWER
             UnityEngine.Debug.Log(message);
 #else
-            Console.WriteLine(message);
+            System.Console.WriteLine(message);
 #endif
         }
     }
