@@ -307,6 +307,27 @@ namespace Observables.Tests
 
             TestContext.Out.WriteLine($"Invoke message with payload with 2 observers took {stopwatch.Elapsed.TotalMilliseconds} ms");
         }
+
+        [Test]
+        public void TestObservableKeysFindingObjects()
+        {
+            Observable<int> observable1 = new Observable<int>();
+            Observable<int> observable2 = new Observable<int>();
+
+            bool action1Called = false;
+            bool action2Called = false;
+            Action<int> action1 = a => action1Called = true;
+            Action<int> action2 = a => action2Called = true;
+
+            observable1 += action1;
+            observable2 += action2;
+
+            Observable<int>.InvokeMessage(observable1, 1);
+            Observable<int>.InvokeMessage(observable2, 2);
+
+            Assert.IsTrue(action1Called);
+            Assert.IsTrue(action2Called);
+        }
     }
 
     class DestructorMock : ADestructorObserver 

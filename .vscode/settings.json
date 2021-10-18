@@ -8,5 +8,6 @@
         "**/Thumbs.db": true,
         "*.csproj": true,
         "**/*.meta": true
-    }
+    },
+    "omnisharp.useGlobalMono": "always"
 }
