@@ -203,7 +203,7 @@ namespace Observables
             }
         }
 
-#if UNITY_INCLUDE_TESTS
+#if UNITY_2019_1_OR_NEWER
         private void OnObserverDestroyed(ADestroyableObserver observer)
         {
             observer.onDestroyObservable.RemoveObserver(OnObserverDestroyed);
