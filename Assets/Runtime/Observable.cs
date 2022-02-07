@@ -54,7 +54,7 @@ namespace Observables
             Observe(observer, action, willBeUnregisteredManually);
         }
 
-        public void Observe(object observer, Action<TObserved> action, bool willBeUnregisteredManually)
+        public void Observe(object observer, Action<TObserved> action, bool willBeUnregisteredManually = false)
         {
             long key = GetId(observer, out bool shouldAdd);
 
@@ -285,7 +285,7 @@ namespace Observables
             Observe(observer, action, willBeUnregisteredManually);
         }
 
-        public void Observe(object observer, Action<TObserved, TPayload> action, bool willBeUnregisteredManually)
+        public void Observe(object observer, Action<TObserved, TPayload> action, bool willBeUnregisteredManually = false)
         {
             long key = _observable.GetId(observer, out bool shouldAdd);
 
