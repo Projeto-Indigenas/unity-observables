@@ -9,17 +9,19 @@ namespace Observables
 {
     public class Observable<TObserved>
     {
-        private static readonly Predicate<WeakReference<Action<TObserved>>> _searchActionPredicate = each => each.TryGetTarget(out Action<TObserved> target) && target.Equals(_searchingAction);
+        private static readonly Predicate<WeakReference<Action<TObserved>>> _searchActionPredicate = each =>
+        {
+            return each.TryGetTarget(out Action<TObserved> target) && target.Equals(_searchingAction);
+        };
+
         private static Action<TObserved> _searchingAction = default;
 
         private static long _currentId = long.MinValue;
-
-        private readonly List<long> _keys = new List<long>();
         private readonly ConditionalWeakTable<object, IdHolder> _keysIds = new ConditionalWeakTable<object, IdHolder>();
         private readonly Dictionary<long, List<WeakReference<Action<TObserved>>>> _observers = new Dictionary<long, List<WeakReference<Action<TObserved>>>>();
         private readonly Dictionary<Type, IObservable> _observablesWithPayload = new Dictionary<Type, IObservable>();
 
-        internal List<long> keys => _keys;
+        internal List<long> keys { get; } = new List<long>();
 
         public static Observable<TObserved> operator +(Observable<TObserved> observable, Action<TObserved> action)
         {
@@ -49,6 +51,11 @@ namespace Observables
         {
             object observer = action.Target;
 
+            Observe(observer, action, willBeUnregisteredManually);
+        }
+
+        public void Observe(object observer, Action<TObserved> action, bool willBeUnregisteredManually)
+        {
             long key = GetId(observer, out bool shouldAdd);
 
             if (_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list))
@@ -64,7 +71,7 @@ namespace Observables
             List<WeakReference<Action<TObserved>>> newList = new List<WeakReference<Action<TObserved>>> { weakAction };
             _observers.Add(key, newList);
 
-            if (shouldAdd) _keys.Add(key);
+            if (shouldAdd) keys.Add(key);
 
             SetupDestructor(observer, willBeUnregisteredManually);
         }
@@ -72,7 +79,11 @@ namespace Observables
         public void RemoveObserver(Action<TObserved> action)
         {
             object observer = action.Target;
+            RemoveObserver(observer, action);
+        }
 
+        public void RemoveObserver(object observer, Action<TObserved> action)
+        {
             long key = GetId(observer, out _);
 
             if (!_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list)) return;
@@ -84,7 +95,7 @@ namespace Observables
 
         public void ClearObservers()
         {
-            _keys.Clear();
+            keys.Clear();
             _observers.Clear();
 
             foreach (IObservable each in _observablesWithPayload.Values)
@@ -167,9 +178,9 @@ namespace Observables
 
         private void NotifyObservers(TObserved observed)
         {
-            for (int index = 0; index < _keys.Count; index++)
+            for (int index = 0; index < keys.Count; index++)
             {
-                long key = _keys[index];
+                long key = keys[index];
 
                 if (!_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list)) continue;
 
@@ -194,7 +205,7 @@ namespace Observables
             observer.destructorObservable.RemoveObserver(OnObserverDestructed);
 
             long key = GetId(observer, out _);
-            _ = _keys.Remove(key);
+            _ = keys.Remove(key);
             _ = _observers.Remove(key);
 
             foreach (IObservable observable in _observablesWithPayload.Values)
@@ -209,7 +220,7 @@ namespace Observables
             observer.onDestroyObservable.RemoveObserver(OnObserverDestroyed);
 
             long key = GetId(observer, out _);
-            _ = _keys.Remove(key);
+            _ = keys.Remove(key);
             _ = _observers.Remove(key);
 
             foreach (IObservable observable in _observablesWithPayload.Values)
@@ -271,6 +282,11 @@ namespace Observables
         {
             object observer = action.Target;
 
+            Observe(observer, action, willBeUnregisteredManually);
+        }
+
+        public void Observe(object observer, Action<TObserved, TPayload> action, bool willBeUnregisteredManually)
+        {
             long key = _observable.GetId(observer, out bool shouldAdd);
 
             if (_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list))
@@ -295,6 +311,11 @@ namespace Observables
         {
             object observer = action.Target;
 
+            RemoveObserver(observer, action);
+        }
+
+        public void RemoveObserver(object observer, Action<TObserved, TPayload> action)
+        {
             long key = _observable.GetId(observer, out _);
 
             if (!_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list)) return;
