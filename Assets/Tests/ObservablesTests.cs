@@ -47,7 +47,7 @@ namespace Observables.Tests
         {
             int callCount = 0;
 
-            Observable<float> observable = new Observable<float>();
+            Observable observable = new Observable();
 
             void TestAction(float value)
             {
@@ -55,15 +55,15 @@ namespace Observables.Tests
                 Assert.AreEqual(1F, value);
             }
 
-            observable.Observe(TestAction);
+            observable.Observe<float>(TestAction);
 
-            Observable<float>.InvokeMessage(observable, 1F);
+            observable.InvokeMessage(1F);
 
             Assert.AreEqual(1, callCount);
 
-            observable.RemoveObserver(TestAction);
+            observable.RemoveObserver<float>(TestAction);
 
-            Observable<float>.InvokeMessage(observable, 2F);
+            observable.InvokeMessage(2F);
 
             Assert.AreEqual(1, callCount);
         }
@@ -73,7 +73,7 @@ namespace Observables.Tests
         {
             int callCount = 0;
 
-            Observable<float> observable = new Observable<float>();
+            Observable observable = new Observable();
 
             void TestAction(float value)
             {
@@ -81,15 +81,15 @@ namespace Observables.Tests
                 Assert.AreEqual(1F, value);
             }
 
-            observable += TestAction;
+            observable.Observe<float>(TestAction);
 
-            Observable<float>.InvokeMessage(observable, 1F);
+            observable.InvokeMessage(1F);
 
             Assert.AreEqual(1, callCount);
 
-            observable -= TestAction;
+            observable.RemoveObserver<float>(TestAction);
 
-            Observable<float>.InvokeMessage(observable, 2F);
+            observable.InvokeMessage(2F);
 
             Assert.AreEqual(1, callCount);
         }
@@ -97,28 +97,29 @@ namespace Observables.Tests
         [Test]
         public void TestDestructorObservable() 
         {
-            Observable<int> observable = new Observable<int>();
+            Observable observable = new Observable();
 
             new Action(() =>
             {
                 DestructorMock observer = new DestructorMock();
-                observable.Observe(observer.ObserverAction);
+                Action<int> action = observer.ObserverAction;
+                observable.Observe(action);
                 observer = null;
 
             }).Invoke();
 
-            Observable<int>.InvokeMessage(observable, 1);
+            observable.InvokeMessage(1);
 
             Assert.AreEqual(1, DestructorMock.actionCallCount);
 
-            Observable<int>.InvokeMessage(observable, 10);
+            observable.InvokeMessage(10);
 
             Assert.AreEqual(11, DestructorMock.actionCallCount);
 
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false);
             GC.WaitForPendingFinalizers();
 
-            Observable<int>.InvokeMessage(observable, 1);
+            observable.InvokeMessage(1);
 
             Assert.AreEqual(11, DestructorMock.actionCallCount);
         }
@@ -126,28 +127,28 @@ namespace Observables.Tests
         [Test]
         public void TestDestructorObservableOperatorOverloading()
         {
-            Observable<int> observable = new Observable<int>();
+            Observable observable = new Observable();
 
             new Action(() =>
             {
                 DestructorMock observer = new DestructorMock();
-                observable += observer.ObserverAction;
+                observable.Observe<int>(observer.ObserverAction);
                 observer = null;
 
             }).Invoke();
 
-            Observable<int>.InvokeMessage(observable, 1);
+            observable.InvokeMessage(1);
 
             Assert.AreEqual(1, DestructorMock.actionCallCount);
 
-            Observable<int>.InvokeMessage(observable, 10);
+            observable.InvokeMessage(10);
 
             Assert.AreEqual(11, DestructorMock.actionCallCount);
 
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false);
             GC.WaitForPendingFinalizers();
 
-            Observable<int>.InvokeMessage(observable, 1);
+            observable.InvokeMessage(1);
 
             Assert.AreEqual(11, DestructorMock.actionCallCount);
         }
@@ -155,29 +156,29 @@ namespace Observables.Tests
         [Test]
         public void TestDestructorObservableWithPayload()
         {
-            Observable<int> observable = new Observable<int>();
+            Observable observable = new Observable();
 
             new Action(() =>
             {
                 DestructorMock observer = new DestructorMock();
-                observable.With<float>().Observe(observer.ObserverWithPayloadAction);
+                observable.Observe<int, float>(observer.ObserverWithPayloadAction);
                 observer = null;
 
             }).Invoke();
 
-            Observable<int, float>.InvokeMessage(observable.With<float>(), 1, 1F);
+            observable.InvokeMessage(1, 1F);
 
             Assert.AreEqual(1, DestructorMock.actionWithPayloadCallCount);
 
-            Observable<int, float>.InvokeMessage(observable.With<float>(), 2, 2F);
-            Observable<int, float>.InvokeMessage(observable.With<float>(), 2, 2F);
+            observable.InvokeMessage(2, 2F);
+            observable.InvokeMessage(2, 2F);
 
             Assert.AreEqual(5, DestructorMock.actionWithPayloadCallCount);
 
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false);
             GC.WaitForPendingFinalizers();
 
-            Observable<int, float>.InvokeMessage(observable.With<float>(), 10, 1F);
+            observable.InvokeMessage(10, 1F);
 
             Assert.AreEqual(5, DestructorMock.actionWithPayloadCallCount);
         }
@@ -186,20 +187,20 @@ namespace Observables.Tests
         [UnityTest]
         public IEnumerator TestDestroyingObservableObjects()
         {
-            Observable<int> observable = new Observable<int>();
+            Observable observable = new Observable();
 
             UnityDestroyableMock mock = new GameObject().AddComponent<UnityDestroyableMock>();
-            observable.Observe(mock.ObserverAction);
-            observable.With<float>().Observe(mock.ObservverWithPayloadAction);
+            observable.Observe<int>(mock.ObserverAction);
+            observable.Observe<int, float>(mock.ObservverWithPayloadAction);
 
-            Observable<int>.InvokeMessage(observable, 2);
-            Observable<int, float>.InvokeMessage(observable.With<float>(), 2, 0F);
+            observable.InvokeMessage(2);
+            observable.InvokeMessage(2, 0F);
 
             Assert.AreEqual(2, UnityDestroyableMock.actionCallCount);
             Assert.AreEqual(2, UnityDestroyableMock.actionWithPayloadCallCount);
 
-            Observable<int>.InvokeMessage(observable, 20);
-            Observable<int, float>.InvokeMessage(observable.With<float>(), 10, 0F);
+            observable.InvokeMessage(20);
+            observable.InvokeMessage(10, 0F);
 
             Assert.AreEqual(22, UnityDestroyableMock.actionCallCount);
             Assert.AreEqual(12, UnityDestroyableMock.actionWithPayloadCallCount);
@@ -211,8 +212,8 @@ namespace Observables.Tests
 
             yield return null;
 
-            Observable<int>.InvokeMessage(observable, 20);
-            Observable<int, float>.InvokeMessage(observable.With<float>(), 10, 0F);
+            observable.InvokeMessage(20);
+            observable.InvokeMessage(10, 0F);
 
             Assert.AreEqual(22, UnityDestroyableMock.actionCallCount);
             Assert.AreEqual(12, UnityDestroyableMock.actionWithPayloadCallCount);
@@ -221,20 +222,20 @@ namespace Observables.Tests
         [UnityTest]
         public IEnumerator TestDestroyingObservableObjectsOperatorOverloading()
         {
-            Observable<int> observable = new Observable<int>();
+            Observable observable = new Observable();
 
             UnityDestroyableMock mock = new GameObject().AddComponent<UnityDestroyableMock>();
-            observable += mock.ObserverAction;
-            observable.With<float>().observable += mock.ObservverWithPayloadAction;
+            observable.Observe<int>(mock.ObserverAction);
+            observable.Observe<int, float>(mock.ObservverWithPayloadAction);
 
-            Observable<int>.InvokeMessage(observable, 2);
-            Observable<int, float>.InvokeMessage(observable.With<float>(), 2, 0F);
+            observable.InvokeMessage(2);
+            observable.InvokeMessage(2, 0F);
 
             Assert.AreEqual(2, UnityDestroyableMock.actionCallCount);
             Assert.AreEqual(2, UnityDestroyableMock.actionWithPayloadCallCount);
 
-            Observable<int>.InvokeMessage(observable, 20);
-            Observable<int, float>.InvokeMessage(observable.With<float>(), 10, 0F);
+            observable.InvokeMessage(20);
+            observable.InvokeMessage(10, 0F);
 
             Assert.AreEqual(22, UnityDestroyableMock.actionCallCount);
             Assert.AreEqual(12, UnityDestroyableMock.actionWithPayloadCallCount);
@@ -246,8 +247,8 @@ namespace Observables.Tests
 
             yield return null;
 
-            Observable<int>.InvokeMessage(observable, 20);
-            Observable<int, float>.InvokeMessage(observable.With<float>(), 10, 0F);
+            observable.InvokeMessage(20);
+            observable.InvokeMessage(10, 0F);
 
             Assert.AreEqual(22, UnityDestroyableMock.actionCallCount);
             Assert.AreEqual(12, UnityDestroyableMock.actionWithPayloadCallCount);
@@ -257,16 +258,16 @@ namespace Observables.Tests
         [Test]
         public void TestObservableOperatorOverloading()
         {
-            Observable<int> observable = new Observable<int>();
+            Observable observable = new Observable();
 
             DestructorMock mock = new DestructorMock();
-            observable += mock.ObserverAction;
+            observable.Observe<int>(mock.ObserverAction);
 
-            Observable<int>.InvokeMessage(observable, 2);
+            observable.InvokeMessage(2);
 
             Assert.AreEqual(2, DestructorMock.actionCallCount);
 
-            Observable<int>.InvokeMessage(observable, 20);
+            observable.InvokeMessage(20);
 
             Assert.AreEqual(22, DestructorMock.actionCallCount);
 
@@ -275,7 +276,7 @@ namespace Observables.Tests
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false);
             GC.WaitForPendingFinalizers();
 
-            Observable<int>.InvokeMessage(observable, 20);
+            observable.InvokeMessage(20);
 
             Assert.AreEqual(22, DestructorMock.actionCallCount);
         }
@@ -285,24 +286,24 @@ namespace Observables.Tests
         {
             Stopwatch stopwatch = new Stopwatch();
 
-            Observable<int> observable = new Observable<int>();
+            Observable observable = new Observable();
 
             UnityDestroyableMock goMock = new GameObject().AddComponent<UnityDestroyableMock>();
             DestructorMock mock = new DestructorMock();
-            observable.Observe(goMock.ObserverAction);
-            observable.With<float>().Observe(goMock.ObservverWithPayloadAction);
+            observable.Observe<int>(goMock.ObserverAction);
+            observable.Observe<int, float>(goMock.ObservverWithPayloadAction);
 
-            observable.Observe(mock.ObserverAction);
-            observable.With<float>().Observe(mock.ObserverWithPayloadAction);
+            observable.Observe<int>(mock.ObserverAction);
+            observable.Observe<int, float>(mock.ObserverWithPayloadAction);
 
             stopwatch.Start();
-            Observable<int>.InvokeMessage(observable, 0);
+            observable.InvokeMessage(0);
             stopwatch.Stop();
 
             TestContext.Out.WriteLine($"Invoke message with 2 observers took {stopwatch.Elapsed.TotalMilliseconds} ms");
 
             stopwatch.Restart();
-            Observable<int, float>.InvokeMessage(observable.With<float>(), 0, 0F);
+            observable.InvokeMessage(0, 0F);
             stopwatch.Stop();
 
             TestContext.Out.WriteLine($"Invoke message with payload with 2 observers took {stopwatch.Elapsed.TotalMilliseconds} ms");
@@ -311,19 +312,19 @@ namespace Observables.Tests
         [Test]
         public void TestObservableKeysFindingObjects()
         {
-            Observable<int> observable1 = new Observable<int>();
-            Observable<int> observable2 = new Observable<int>();
+            Observable observable1 = new Observable();
+            Observable observable2 = new Observable();
 
             bool action1Called = false;
             bool action2Called = false;
             Action<int> action1 = a => action1Called = true;
             Action<int> action2 = a => action2Called = true;
 
-            observable1 += action1;
-            observable2 += action2;
+            observable1.Observe(action1);
+            observable2.Observe(action2);
 
-            Observable<int>.InvokeMessage(observable1, 1);
-            Observable<int>.InvokeMessage(observable2, 2);
+            observable1.InvokeMessage(1);
+            observable2.InvokeMessage(2);
 
             Assert.IsTrue(action1Called);
             Assert.IsTrue(action2Called);

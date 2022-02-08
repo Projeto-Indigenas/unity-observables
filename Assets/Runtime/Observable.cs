@@ -7,91 +7,64 @@ using System.Runtime.CompilerServices;
 
 namespace Observables
 {
-    public class Observable<TObserved>
+    public class Observable 
     {
-        private static readonly Predicate<WeakReference<Action<TObserved>>> _searchActionPredicate = each =>
+        private static readonly Predicate<WeakReference<AAction>> _searchActionPredicate = each =>
         {
-            return each.TryGetTarget(out Action<TObserved> target) && target.Equals(_searchingAction);
+            return each.TryGetTarget(out AAction target) && target.Equals(_searchingAction);
         };
 
-        private static Action<TObserved> _searchingAction = default;
-
+        private static object[] _argumentsBuffer = new object[3];
+        private static AAction _searchingAction = default;
         private static long _currentId = long.MinValue;
+
         private readonly ConditionalWeakTable<object, IdHolder> _keysIds = new ConditionalWeakTable<object, IdHolder>();
-        private readonly Dictionary<long, List<WeakReference<Action<TObserved>>>> _observers = new Dictionary<long, List<WeakReference<Action<TObserved>>>>();
+        private readonly Dictionary<long, List<WeakReference<AAction>>> _observers = new Dictionary<long, List<WeakReference<AAction>>>();
         private readonly Dictionary<Type, IObservable> _observablesWithPayload = new Dictionary<Type, IObservable>();
+
+        private readonly Action<ADestructorObserver> _onDestructorCalled = default;
+        private readonly Action<ADestroyableObserver> _onDestroyCalled = default;
 
         internal List<long> keys { get; } = new List<long>();
 
-        public static Observable<TObserved> operator +(Observable<TObserved> observable, Action<TObserved> action)
+        public Observable()
         {
-            observable.Observe(action);
-            return observable;
+            _onDestructorCalled = OnObserverDestructed;
+            _onDestroyCalled = OnObserverDestroyed;
         }
 
-        public static Observable<TObserved> operator -(Observable<TObserved> observable, Action<TObserved> action)
-        {
-            observable.RemoveObserver(action);
-            return observable;
-        }
-
-        public Observable<TObserved, TPayload> With<TPayload>()
-        {
-            if (_observablesWithPayload.TryGetValue(typeof(TPayload), out IObservable observable))
-            {
-                return (Observable<TObserved, TPayload>)observable;
-            }
-
-            Observable<TObserved, TPayload> newObservable = new Observable<TObserved, TPayload>(this);
-            _observablesWithPayload[typeof(TPayload)] = newObservable;
-            return newObservable;
-        }
-
-        public void Observe(Action<TObserved> action, bool willBeUnregisteredManually = false)
-        {
-            object observer = action.Target;
-
-            Observe(observer, action, willBeUnregisteredManually);
-        }
-
-        public void Observe(object observer, Action<TObserved> action, bool willBeUnregisteredManually = false)
-        {
-            long key = GetId(observer, out bool shouldAdd);
-
-            if (_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list))
-            {
-                if (Contains(list, action)) return;
-
-                list.Add(new WeakReference<Action<TObserved>>(action));
-
-                return;
-            }
-
-            WeakReference<Action<TObserved>> weakAction = new WeakReference<Action<TObserved>>(action);
-            List<WeakReference<Action<TObserved>>> newList = new List<WeakReference<Action<TObserved>>> { weakAction };
-            _observers.Add(key, newList);
-
-            if (shouldAdd) keys.Add(key);
-
-            SetupDestructor(observer, willBeUnregisteredManually);
-        }
-
-        public void RemoveObserver(Action<TObserved> action)
-        {
-            object observer = action.Target;
-            RemoveObserver(observer, action);
-        }
-
-        public void RemoveObserver(object observer, Action<TObserved> action)
-        {
-            long key = GetId(observer, out _);
-
-            if (!_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list)) return;
-
-            _searchingAction = action;
-            _ = list.RemoveWhere(_searchActionPredicate);
-            _searchingAction = null;
-        }
+        public void Observe(Action action, bool willBeUnregisteredMannually = false) 
+            => Observe(action.Target, action, willBeUnregisteredMannually);
+        public void Observe<TParam>(Action<TParam> action, bool willBeUnregisteredMannually = false) 
+            => Observe(action.Target, action, willBeUnregisteredMannually);
+        public void Observe<TParam1, TParam2>(Action<TParam1, TParam2> action, bool willBeUnregisteredMannually = false) 
+            => Observe(action.Target, action, willBeUnregisteredMannually);
+        public void Observe<TParam1, TParam2, TParam3>(Action<TParam1, TParam2, TParam3> action, bool willBeUnregisteredMannually = false) 
+            => Observe(action.Target, action, willBeUnregisteredMannually);
+        public void Observe(object observer, Action action, bool willBeUnregisteredMannually = false) 
+            => Observe(observer, new ActionContainer(action), willBeUnregisteredMannually);
+        public void Observe<TParam>(object observer, Action<TParam> action, bool willBeUnregisteredMannually = false)
+            => Observe(observer, new ActionContainer<TParam>(action), willBeUnregisteredMannually);
+        public void Observe<TParam1, TParam2>(object observer, Action<TParam1, TParam2> action, bool willBeUnregisteredMannually = false)
+            => Observe(observer, new ActionContainer<TParam1, TParam2>(action), willBeUnregisteredMannually);
+        public void Observe<TParam1, TParam2, TParam3>(object observer, Action<TParam1, TParam2, TParam3> action, bool willBeUnregisteredMannually = false)
+            => Observe(observer, new ActionContainer<TParam1, TParam2, TParam3>(action), willBeUnregisteredMannually);
+        public void RemoveObserver(Action action) 
+            => RemoveObserver(action.Target, action);
+        public void RemoveObserver<TParam>(Action<TParam> action) 
+            => RemoveObserver(action.Target, action);
+        public void RemoveObserver<TParam1, TParam2>(Action<TParam1, TParam2> action) 
+            => RemoveObserver(action.Target, action);
+        public void RemoveObserver<TParam1, TParam2, TParam3>(Action<TParam1, TParam2, TParam3> action)
+            => RemoveObserver(action.Target, action);
+        public void RemoveObserver(object observer, Action action)
+            => RemoveObserver(observer, new ActionContainer(action));
+        public void RemoveObserver<TParam>(object observer, Action<TParam> action)
+            => RemoveObserver(observer, new ActionContainer<TParam>(action));
+        public void RemoveObserver<TParam1, TParam2>(object observer, Action<TParam1, TParam2> action)
+            => RemoveObserver(observer, new ActionContainer<TParam1, TParam2>(action));
+        public void RemoveObserver<TParam1, TParam2, TParam3>(object observer, Action<TParam1, TParam2, TParam3> action)
+            => RemoveObserver(observer, new ActionContainer<TParam1, TParam2, TParam3>(action));
 
         public void ClearObservers()
         {
@@ -104,22 +77,31 @@ namespace Observables
             }
         }
 
-        public static void InvokeMessage(Observable<TObserved> observable, TObserved observed)
+        public void InvokeMessage<TParam>(TParam param)
         {
-#if OBSERVABLES_DEVELOPMENT
-            try
-            {
-#endif
-                observable.NotifyObservers(observed);
-#if OBSERVABLES_DEVELOPMENT
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"Unexpected exception when invoking message. \n" +
-                    $"observed -> {observed}\n" +
-                    $"exception -> {ex}");
-            }
-#endif
+            _argumentsBuffer[0] = param;
+            NotifyObservers(_argumentsBuffer);
+            _argumentsBuffer[0] = null;
+        }
+
+        public void InvokeMessage<TParam1, TParam2>(TParam1 param1, TParam2 param2)
+        {
+            _argumentsBuffer[0] = param1;
+            _argumentsBuffer[1] = param2;
+            NotifyObservers(_argumentsBuffer);
+            _argumentsBuffer[0] = null;
+            _argumentsBuffer[1] = null;
+        }
+
+        public void InvokeMessage<TParam1, TParam2, TParam3>(TParam1 param1, TParam2 param2, TParam3 param3)
+        {
+            _argumentsBuffer[0] = param1;
+            _argumentsBuffer[1] = param2;
+            _argumentsBuffer[2] = param3;
+            NotifyObservers(_argumentsBuffer);
+            _argumentsBuffer[0] = null;
+            _argumentsBuffer[1] = null;
+            _argumentsBuffer[2] = null;
         }
 
         internal void SetupDestructor(object observer, bool
@@ -132,7 +114,7 @@ namespace Observables
         {
             if (observer is ADestructorObserver destructorObserver)
             {
-                destructorObserver.destructorObservable.Observe(OnObserverDestructed);
+                destructorObserver.destructorObservable.Observe(_onDestructorCalled);
 
                 return;
             }
@@ -140,7 +122,7 @@ namespace Observables
 #if UNITY_2019_1_OR_NEWER
             if (observer is ADestroyableObserver observableBehaviour)
             {
-                observableBehaviour.onDestroyObservable.Observe(OnObserverDestroyed);
+                observableBehaviour.onDestroyObservable.Observe(_onDestroyCalled);
 
                 return;
             }
@@ -148,7 +130,7 @@ namespace Observables
 
 #if OBSERVABLES_DEVELOPMENT
             Type observerType = observer.GetType();
-            bool isObservable = observerType.IsGenericType && observerType.GetGenericTypeDefinition() == typeof(Observable<>);
+            bool isObservable = observerType == typeof(Observable);
             if (isObservable || willBeUnregisteredManually) return;
 
             Logger.Log($"Observer is not either DestructorObservable nor ObservableBehaviour. " +
@@ -157,13 +139,46 @@ namespace Observables
 #endif
         }
 
-        private bool Contains(List<WeakReference<Action<TObserved>>> list, Action<TObserved> action)
+        private void Observe(object observer, AAction action, bool willBeUnregisteredManually = false)
+        {
+            long key = GetId(observer, out bool shouldAdd);
+
+            if (_observers.TryGetValue(key, out List<WeakReference<AAction>> list))
+            {
+                if (Contains(list, action)) return;
+
+                list.Add(new WeakReference<AAction>(action));
+
+                return;
+            }
+
+            WeakReference<AAction> weakAction = new WeakReference<AAction>(action);
+            List<WeakReference<AAction>> newList = new List<WeakReference<AAction>> { weakAction };
+            _observers.Add(key, newList);
+
+            if (shouldAdd) keys.Add(key);
+
+            SetupDestructor(observer, willBeUnregisteredManually);
+        }
+
+        private void RemoveObserver(object observer, AAction action)
+        {
+            long key = GetId(observer, out _);
+
+            if (!_observers.TryGetValue(key, out List<WeakReference<AAction>> list)) return;
+
+            _searchingAction = action;
+            _ = list.RemoveWhere(_searchActionPredicate);
+            _searchingAction = null;
+        }
+
+        private bool Contains(List<WeakReference<AAction>> list, AAction action)
         {
             for (int index = list.Count - 1; index >= 0; index--)
             {
-                WeakReference<Action<TObserved>> current = list[index];
+                WeakReference<AAction> current = list[index];
 
-                if (!current.TryGetTarget(out Action<TObserved> target))
+                if (!current.TryGetTarget(out AAction target))
                 {
                     list.RemoveAt(index);
 
@@ -176,33 +191,46 @@ namespace Observables
             return false;
         }
 
-        private void NotifyObservers(TObserved observed)
+        private void NotifyObservers(object[] args)
         {
-            for (int index = 0; index < keys.Count; index++)
+#if OBSERVABLES_DEVELOPMENT
+            try
             {
-                long key = keys[index];
-
-                if (!_observers.TryGetValue(key, out List<WeakReference<Action<TObserved>>> list)) continue;
-
-                for (int observerIndex = list.Count - 1; observerIndex >= 0; observerIndex--)
+#endif
+                for (int index = 0; index < keys.Count; index++)
                 {
-                    WeakReference<Action<TObserved>> current = list[observerIndex];
+                    long key = keys[index];
 
-                    if (!current.TryGetTarget(out Action<TObserved> target))
+                    if (!_observers.TryGetValue(key, out List<WeakReference<AAction>> list)) continue;
+
+                    for (int observerIndex = list.Count - 1; observerIndex >= 0; observerIndex--)
                     {
-                        list.RemoveAt(observerIndex);
+                        WeakReference<AAction> current = list[observerIndex];
 
-                        continue;
+                        if (!current.TryGetTarget(out AAction target))
+                        {
+                            list.RemoveAt(observerIndex);
+
+                            continue;
+                        }
+
+                        target?.Invoke(args);
                     }
-
-                    target?.Invoke(observed);
                 }
+#if OBSERVABLES_DEVELOPMENT
             }
+            catch (Exception ex)
+            {
+                Logger.Log($"Unexpected exception when invoking message. \n" +
+                    $"args -> {args}\n" +
+                    $"exception -> {ex}");
+            }
+#endif
         }
 
         private void OnObserverDestructed(ADestructorObserver observer)
         {
-            observer.destructorObservable.RemoveObserver(OnObserverDestructed);
+            observer.destructorObservable.RemoveObserver(_onDestructorCalled);
 
             long key = GetId(observer, out _);
             _ = keys.Remove(key);
@@ -217,7 +245,7 @@ namespace Observables
 #if UNITY_2019_1_OR_NEWER
         private void OnObserverDestroyed(ADestroyableObserver observer)
         {
-            observer.onDestroyObservable.RemoveObserver(OnObserverDestroyed);
+            observer.onDestroyObservable.RemoveObserver(_onDestroyCalled);
 
             long key = GetId(observer, out _);
             _ = keys.Remove(key);
@@ -250,156 +278,106 @@ namespace Observables
         void ClearObservers();
     }
 
-    public class Observable<TObserved, TPayload> : IObservable
-    {
-        private readonly Dictionary<long, List<IObserverInfo>> _observersWithPayload = new Dictionary<long, List<IObserverInfo>>();
-        private readonly Observable<TObserved> _observable = default;
-
-        public Observable<TObserved, TPayload> observable
-        {
-            get => this;
-            set { }
-        }
-
-        public static Observable<TObserved, TPayload> operator +(Observable<TObserved, TPayload> observable, Action<TObserved, TPayload> action)
-        {
-            observable.Observe(action);
-            return observable;
-        }
-
-        public static Observable<TObserved, TPayload> operator -(Observable<TObserved, TPayload> observable, Action<TObserved, TPayload> action)
-        {
-            observable.RemoveObserver(action);
-            return observable;
-        }
-
-        internal Observable(Observable<TObserved> observable)
-        {
-            _observable = observable;
-        }
-
-        public void Observe(Action<TObserved, TPayload> action, bool willBeUnregisteredManually = false)
-        {
-            object observer = action.Target;
-
-            Observe(observer, action, willBeUnregisteredManually);
-        }
-
-        public void Observe(object observer, Action<TObserved, TPayload> action, bool willBeUnregisteredManually = false)
-        {
-            long key = _observable.GetId(observer, out bool shouldAdd);
-
-            if (_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list))
-            {
-                if (Contains(list, action)) return;
-
-                list.Add(new ObserverPayloadInfo<TObserved, TPayload>(action));
-
-                return;
-            }
-
-            IObserverInfo observerInfo = new ObserverPayloadInfo<TObserved, TPayload>(action);
-            List<IObserverInfo> newList = new List<IObserverInfo> { observerInfo };
-            _observersWithPayload.Add(key, newList);
-
-            if (shouldAdd) _observable.keys.Add(key);
-
-            _observable.SetupDestructor(observer, willBeUnregisteredManually);
-        }
-
-        public void RemoveObserver(Action<TObserved, TPayload> action)
-        {
-            object observer = action.Target;
-
-            RemoveObserver(observer, action);
-        }
-
-        public void RemoveObserver(object observer, Action<TObserved, TPayload> action)
-        {
-            long key = _observable.GetId(observer, out _);
-
-            if (!_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list)) return;
-
-            for (int index = 0; index < list.Count; index++)
-            {
-                IObserverInfo current = list[index];
-
-                if (!(current is ObserverPayloadInfo<TObserved, TPayload> observerPayloadInfo)) continue;
-
-                observerPayloadInfo.Unregister(action);
-            }
-        }
-
-        public static void InvokeMessage(Observable<TObserved, TPayload> observable, TObserved observed, TPayload payload)
-        {
-#if OBSERVABLES_DEVELOPMENT
-            try
-            {
-#endif
-                observable.NotifyObservers(observed, payload);
-#if OBSERVABLES_DEVELOPMENT
-            }
-            catch (Exception ex)
-            {
-                Logger.Log($"Unexpected exception when invoking message. \n" +
-                    $"observed -> {observed}\n" +
-                    $"payload -> {payload}\n" +
-                    $"exception -> {ex}");
-            }
-#endif
-        }
-
-        private void NotifyObservers(TObserved observed, TPayload payload)
-        {
-            for (int index = 0; index < _observable.keys.Count; index++)
-            {
-                long key = _observable.keys[index];
-
-                if (!_observersWithPayload.TryGetValue(key, out List<IObserverInfo> list)) continue;
-
-                for (int observerIndex = 0; observerIndex < list.Count; observerIndex++)
-                {
-                    IObserverInfo observerInfo = list[observerIndex];
-
-                    if (!(observerInfo is ObserverPayloadInfo<TObserved, TPayload> observerPayloadInfo)) continue;
-
-                    observerPayloadInfo?.Invoke(observed, payload);
-                }
-            }
-        }
-
-        private bool Contains(List<IObserverInfo> list, Action<TObserved, TPayload> action)
-        {
-            for (int index = 0; index < list.Count; index++)
-            {
-                IObserverInfo current = list[index];
-                if (current is ObserverPayloadInfo<TObserved, TPayload> observerPayloadInfo)
-                {
-                    return observerPayloadInfo.IsRegistered(action);
-                }
-            }
-            return false;
-        }
-
-        #region IObservable
-
-        void IObservable.Remove(long key)
-        {
-            _ = _observersWithPayload.Remove(key);
-        }
-
-        void IObservable.ClearObservers()
-        {
-            _observersWithPayload.Clear();
-        }
-
-        #endregion
-    }
-
     class IdHolder
     {
         public readonly long id;
 
         public IdHolder(long id) => this.id = id;
+    }
+
+    public abstract class AAction
+    {
+        public abstract object Target { get; }
+
+        public abstract void Invoke(object[] args);
+
+        public static implicit operator AAction(Action action) => new ActionContainer(action);
+    }
+
+    public class ActionContainer : AAction, IEquatable<ActionContainer>
+    {
+        private readonly Action _action;
+
+        public override object Target => _action.Target;
+
+        public ActionContainer(Action other)
+        {
+            _action = other;
+        }
+
+        public static implicit operator ActionContainer(Action action) => new ActionContainer(action);
+
+        public override void Invoke(object[] _) => _action?.Invoke();
+
+        bool IEquatable<ActionContainer>.Equals(ActionContainer other)
+        {
+            return _action == other._action;
+        }
+    }
+
+    public class ActionContainer<TParam> : AAction, IEquatable<ActionContainer<TParam>>
+    {
+        private readonly Action<TParam> _action = default;
+
+        public override object Target => _action.Target;
+
+        public ActionContainer(Action<TParam> action)
+        {
+            _action = action;
+        }
+
+        public static implicit operator ActionContainer<TParam>(Action<TParam> action) 
+            => new ActionContainer<TParam>(action);
+
+        public override void Invoke(object[] args) => _action?.Invoke((TParam)args[0]);
+
+        bool IEquatable<ActionContainer<TParam>>.Equals(ActionContainer<TParam> other)
+        {
+            return _action == other._action;
+        }
+    }
+
+    public class ActionContainer<TParam1, TParam2> : AAction, IEquatable<ActionContainer<TParam1, TParam2>>
+    {
+        private readonly Action<TParam1, TParam2> _action = default;
+
+        public override object Target => _action.Target;
+
+        public ActionContainer(Action<TParam1, TParam2> action)
+        {
+            _action = action;
+        }
+
+        public static implicit operator ActionContainer<TParam1, TParam2>(Action<TParam1, TParam2> action) 
+            => new ActionContainer<TParam1, TParam2>(action);
+
+        public override void Invoke(object[] args) => _action?.Invoke((TParam1)args[0], (TParam2)args[1]);
+
+        bool IEquatable<ActionContainer<TParam1, TParam2>>.Equals(ActionContainer<TParam1, TParam2> other)
+        {
+            return _action == other._action;
+        }
+    }
+
+    public class ActionContainer<TParam1, TParam2, TParam3> : AAction, IEquatable<ActionContainer<TParam1, TParam2, TParam3>>
+    {
+        private readonly Action<TParam1, TParam2, TParam3> _action = default;
+
+        public override object Target => _action;
+
+        public ActionContainer(Action<TParam1, TParam2, TParam3> action)
+        {
+            _action = action;
+        }
+
+        public static implicit operator ActionContainer<TParam1, TParam2, TParam3>(Action<TParam1, TParam2, TParam3> action)
+           => new ActionContainer<TParam1, TParam2, TParam3>(action);
+
+        public override void Invoke(object[] args) => _action?.Invoke((TParam1)args[0], (TParam2)args[1], (TParam3)args[2]);
+
+        bool IEquatable<ActionContainer<TParam1, TParam2, TParam3>>.Equals(ActionContainer<TParam1, TParam2, TParam3> other)
+        {
+            return _action == other._action;
+        }
     }
 }

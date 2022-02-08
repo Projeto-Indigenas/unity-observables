@@ -4,19 +4,13 @@ namespace Observables.Destructors
 {
     public abstract class ADestructorObserver
     {
-        private readonly Observable<ADestructorObserver> _destructorObservable = new Observable<ADestructorObserver>();
-
-        public Observable<ADestructorObserver> destructorObservable
-        {
-            get => _destructorObservable;
-            set { }
-        }
+        internal readonly Observable destructorObservable = new Observable();
 
         ~ADestructorObserver()
         {
             Logger.Log($"~ADestructorObservable() called for {this}");
 
-            Observable<ADestructorObserver>.InvokeMessage(destructorObservable, this);
+            destructorObservable.InvokeMessage(this);
         }
     }
 }

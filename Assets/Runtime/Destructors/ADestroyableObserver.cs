@@ -7,19 +7,13 @@ namespace Observables.Destructors
 {
     public abstract class ADestroyableObserver : MonoBehaviour
     {
-        private readonly Observable<ADestroyableObserver> _onDestroyObservable = new Observable<ADestroyableObserver>();
-
-        public Observable<ADestroyableObserver> onDestroyObservable
-        {
-            get => _onDestroyObservable;
-            set { }
-        }
+        internal readonly Observable onDestroyObservable = new Observable();
 
         protected virtual void OnDestroy()
         {
             Logger.Log($"OnDestroy() called for {this}");
 
-            Observable<ADestroyableObserver>.InvokeMessage(onDestroyObservable, this);
+            onDestroyObservable.InvokeMessage(this);
         }
     }
 }
