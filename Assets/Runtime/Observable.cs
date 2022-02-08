@@ -9,21 +9,21 @@ namespace Observables
 {
     public class Observable 
     {
-        private static readonly Predicate<AAction> _searchActionPredicate = each =>
+        private static readonly Predicate<AActionContainer> _searchActionPredicate = each =>
         {
             return each.Equals(_searchingAction);
         };
 
-        private static AAction _searchingAction = default;
+        private static AActionContainer _searchingAction = default;
         private static object[] _argumentsBuffer = new object[3];
         private static long _currentId = long.MinValue;
 
         private readonly List<long> _keys = new List<long>();
         private readonly ConditionalWeakTable<object, IdHolder> _keysIds = new ConditionalWeakTable<object, IdHolder>();
-        private readonly Dictionary<long, List<AAction>> _observersNoParam = new Dictionary<long, List<AAction>>();
-        private readonly Dictionary<long, List<AAction>> _observersOneParam = new Dictionary<long, List<AAction>>();
-        private readonly Dictionary<long, List<AAction>> _observersTwoParam = new Dictionary<long, List<AAction>>();
-        private readonly Dictionary<long, List<AAction>> _observersThreeParam = new Dictionary<long, List<AAction>>();
+        private readonly Dictionary<long, List<AActionContainer>> _observersNoParam = new Dictionary<long, List<AActionContainer>>();
+        private readonly Dictionary<long, List<AActionContainer>> _observersOneParam = new Dictionary<long, List<AActionContainer>>();
+        private readonly Dictionary<long, List<AActionContainer>> _observersTwoParam = new Dictionary<long, List<AActionContainer>>();
+        private readonly Dictionary<long, List<AActionContainer>> _observersThreeParam = new Dictionary<long, List<AActionContainer>>();
 
         private readonly Action<ADestructorObserver> _onDestructorCalled = default;
         private readonly Action<ADestroyableObserver> _onDestroyCalled = default;
@@ -144,11 +144,11 @@ namespace Observables
 #endif
         }
 
-        private void Observe(object observer, AAction action, Dictionary<long, List<AAction>> dict, bool willBeUnregisteredManually = false)
+        private void Observe(object observer, AActionContainer action, Dictionary<long, List<AActionContainer>> dict, bool willBeUnregisteredManually = false)
         {
             long key = GetId(observer, out bool shouldAdd);
 
-            if (dict.TryGetValue(key, out List<AAction> list))
+            if (dict.TryGetValue(key, out List<AActionContainer> list))
             {
                 if (Contains(list, action)) return;
 
@@ -157,7 +157,7 @@ namespace Observables
                 return;
             }
 
-            List<AAction> newList = new List<AAction> { action };
+            List<AActionContainer> newList = new List<AActionContainer> { action };
             dict.Add(key, newList);
 
             if (shouldAdd) _keys.Add(key);
@@ -165,22 +165,22 @@ namespace Observables
             SetupDestructor(observer, willBeUnregisteredManually);
         }
 
-        private void RemoveObserver(object observer, AAction action, Dictionary<long, List<AAction>> dict)
+        private void RemoveObserver(object observer, AActionContainer action, Dictionary<long, List<AActionContainer>> dict)
         {
             long key = GetId(observer, out _);
 
-            if (!dict.TryGetValue(key, out List<AAction> list)) return;
+            if (!dict.TryGetValue(key, out List<AActionContainer> list)) return;
 
             _searchingAction = action;
             _ = list.RemoveWhere(_searchActionPredicate);
             _searchingAction = null;
         }
 
-        private bool Contains(List<AAction> list, AAction action)
+        private bool Contains(List<AActionContainer> list, AActionContainer action)
         {
             for (int index = 0; index < list.Count; index++)
             {
-                AAction current = list[index];
+                AActionContainer current = list[index];
 
                 if (current.Equals(action)) return true;
             }
@@ -188,7 +188,7 @@ namespace Observables
             return false;
         }
 
-        private void NotifyObservers(object[] args, Dictionary<long, List<AAction>> dict)
+        private void NotifyObservers(object[] args, Dictionary<long, List<AActionContainer>> dict)
         {
 #if OBSERVABLES_DEVELOPMENT
             try
@@ -198,11 +198,11 @@ namespace Observables
                 {
                     long key = _keys[index];
 
-                    if (!dict.TryGetValue(key, out List<AAction> list)) continue;
+                    if (!dict.TryGetValue(key, out List<AActionContainer> list)) continue;
 
                     for (int observerIndex = 0; observerIndex < list.Count; observerIndex++)
                     {
-                        AAction current = list[observerIndex];
+                        AActionContainer current = list[observerIndex];
 
                         current?.Invoke(args);
                     }
@@ -262,76 +262,5 @@ namespace Observables
     {
         public readonly long id;
         public IdHolder(long id) => this.id = id;
-    }
-
-    public abstract class AAction : IEquatable<AAction>
-    {
-        public abstract object target { get; }
-        public abstract bool Equals(AAction other);
-        public abstract void Invoke(object[] args);
-        public static implicit operator AAction(Action action) => new ActionContainer(action);
-    }
-
-    public class ActionContainer : AAction, IEquatable<ActionContainer>
-    {
-        private readonly Action _action;
-        public override object target => _action?.Target;
-        public ActionContainer(Action action) => _action = action;
-        public static implicit operator ActionContainer(Action action) => new ActionContainer(action);
-        public override void Invoke(object[] _) => _action?.Invoke();
-        public bool Equals(ActionContainer other) => _action == other._action;
-        public override bool Equals(AAction other)
-        {
-            if (!(other is ActionContainer container)) return false;
-            return Equals(container);
-        }
-    }
-
-    public class ActionContainer<TParam> : AAction, IEquatable<ActionContainer<TParam>>
-    {
-        private readonly Action<TParam> _action = default;
-        public override object target => _action?.Target;
-        public ActionContainer(Action<TParam> action) => _action = action;
-        public static implicit operator ActionContainer<TParam>(Action<TParam> action) 
-            => new ActionContainer<TParam>(action);
-        public override void Invoke(object[] args) => _action?.Invoke((TParam)args[0]);
-        public bool Equals(ActionContainer<TParam> other) => _action == other._action;
-        public override bool Equals(AAction other)
-        {
-            if (!(other is ActionContainer<TParam> container)) return false;
-            return Equals(container);
-        }
-    }
-
-    public class ActionContainer<TParam1, TParam2> : AAction, IEquatable<ActionContainer<TParam1, TParam2>>
-    {
-        private readonly Action<TParam1, TParam2> _action = default;
-        public override object target => _action?.Target;
-        public ActionContainer(Action<TParam1, TParam2> action) => _action = action;
-        public static implicit operator ActionContainer<TParam1, TParam2>(Action<TParam1, TParam2> action) 
-            => new ActionContainer<TParam1, TParam2>(action);
-        public override void Invoke(object[] args) => _action?.Invoke((TParam1)args[0], (TParam2)args[1]);
-        public bool Equals(ActionContainer<TParam1, TParam2> other) => _action == other._action;
-        public override bool Equals(AAction other)
-        {
-            if (!(other is ActionContainer<TParam1, TParam2> container)) return false;
-            return Equals(container);
-        }
-    }
-
-    public class ActionContainer<TParam1, TParam2, TParam3> : AAction, IEquatable<ActionContainer<TParam1, TParam2, TParam3>>
-    {
-        private readonly Action<TParam1, TParam2, TParam3> _action = default;
-        public override object target => _action.Target;
-        public ActionContainer(Action<TParam1, TParam2, TParam3> action) => _action = action;
-        public static implicit operator ActionContainer<TParam1, TParam2, TParam3>(Action<TParam1, TParam2, TParam3> action)
-           => new ActionContainer<TParam1, TParam2, TParam3>(action);
-        public override void Invoke(object[] args) => _action?.Invoke((TParam1)args[0], (TParam2)args[1], (TParam3)args[2]);
-        public bool Equals(ActionContainer<TParam1, TParam2, TParam3> other) => _action == other._action;
-        public override bool Equals(AAction other)
-        {
-            if (!(other is ActionContainer<TParam1, TParam2, TParam3> container)) return false;
-            return Equals(container);
-        }
     }
 }
