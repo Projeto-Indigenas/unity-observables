@@ -7,7 +7,7 @@ namespace Observables.Destructors
 {
     public abstract class ADestroyableObserver : MonoBehaviour
     {
-        internal readonly Observable onDestroyObservable = new Observable();
+        public readonly Observable onDestroyObservable = new Observable();
 
         protected virtual void OnDestroy()
         {

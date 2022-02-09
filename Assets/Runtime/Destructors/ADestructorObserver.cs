@@ -4,7 +4,7 @@ namespace Observables.Destructors
 {
     public abstract class ADestructorObserver
     {
-        internal readonly Observable destructorObservable = new Observable();
+        public readonly Observable destructorObservable = new Observable();
 
         ~ADestructorObserver()
         {
